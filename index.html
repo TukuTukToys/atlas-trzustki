@@ -1,0 +1,1090 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Interaktywny model 3D trzustki do rozmowy z pacjentem">
+<title>Atlas trzustki</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:wght@400;600;700&family=Source+Serif+4:opsz,wght@8..60,600;8..60,700&display=swap">
+<style>
+html,body{margin:0}
+
+/* Layout: gabinetowa aplikacja — nagłówek z trybami, scena 3D po lewej, panel objaśnień po prawej; poniżej 760px panel schodzi pod scenę.
+   Jasny motyw celowo (prośba o jasne tło) — jeden wygląd, wszystkie kolory ustawione jawnie. */
+:root{
+  --bg:#EBF1F2; --surface:#FFFFFF; --surface-2:#F4F8F8; --ink:#14303A; --ink-2:#4A6067; --line:#CFDCDF;
+  --accent:#1A6A82; --accent-ink:#FFFFFF; --accent-soft:#DCEDF2;
+  --draft:#FFF4D4; --draft-ink:#664A00; --draft-line:#EBD79F;
+  --warn:#A8402B; --warn-soft:#FBE8E2;
+  --stage-a:#FBFDFD; --stage-b:#DCE7EA;
+  --f-display:"Source Serif 4", Georgia, "Times New Roman", serif;
+  --f-body:"Atkinson Hyperlegible Next", "Segoe UI", system-ui, -apple-system, sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:17px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.app{height:100%;display:flex;flex-direction:column;gap:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px;background:var(--bg)}
+.app:fullscreen{padding-block:14px}
+header.top{display:flex;align-items:center;gap:12px 20px;flex-wrap:wrap}
+.brand{min-width:0}
+.brand h1{font-family:var(--f-display);font-weight:700;font-size:28px;line-height:1.1;margin:0;letter-spacing:-.01em;text-wrap:balance}
+.brand p{margin:2px 0 0;color:var(--ink-2);font-size:15px}
+nav.modes{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+nav.modes button{font-weight:700;font-size:17px;padding:10px 18px;min-height:48px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface);cursor:pointer}
+nav.modes button:hover{border-color:var(--accent)}
+nav.modes button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.fsbtn{font-weight:600;font-size:16px;padding:10px 14px;min-height:48px;border-radius:12px;border:1.5px solid var(--line);background:var(--surface-2);cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.draft{background:var(--draft);color:var(--draft-ink);border:1px solid var(--draft-line);border-radius:10px;padding:7px 14px;font-size:14.5px}
+.draft b{font-weight:700}
+main.work{flex:1;min-height:0;display:flex;gap:12px}
+.stage{position:relative;flex:1;min-width:0;border-radius:18px;overflow:hidden;border:1px solid var(--line);background:radial-gradient(120% 90% at 50% 35%,var(--stage-a) 0%,#F0F5F6 55%,var(--stage-b) 100%);touch-action:none}
+#gl{position:absolute;inset:0}
+#gl canvas{display:block;width:100%!important;height:100%!important;cursor:grab}
+#gl canvas:active{cursor:grabbing}
+#leaders{position:absolute;inset:0;pointer-events:none;overflow:visible}
+#labels{position:absolute;inset:0;pointer-events:none}
+.lbl{position:absolute;left:0;top:0;pointer-events:auto;cursor:pointer;background:rgba(255,255,255,.94);border:1.5px solid var(--line);border-radius:9px;padding:4px 10px;font-size:15px;font-weight:600;white-space:nowrap;box-shadow:0 1px 3px rgba(20,48,58,.08);display:flex;align-items:center;gap:7px;will-change:transform}
+.lbl i{width:10px;height:10px;border-radius:3px;flex:none}
+.lbl:hover{border-color:var(--accent)}
+.lbl.sel{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.lbl.ex{border-color:var(--warn);color:var(--warn);background:#FFF9F7}
+.toolbar{position:absolute;left:10px;right:10px;top:10px;display:flex;flex-wrap:wrap;gap:8px;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:5}
+.toolbar>*{pointer-events:auto}
+.seg{display:inline-flex;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:3px;gap:2px;box-shadow:0 1px 3px rgba(20,48,58,.06)}
+.seg button{border:0;background:transparent;padding:8px 13px;border-radius:9px;font-size:16px;font-weight:600;cursor:pointer;min-height:42px}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.tools{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.tbtn{border:1.5px solid var(--line);background:var(--surface);padding:8px 13px;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;min-height:46px;display:inline-flex;align-items:center;gap:7px;box-shadow:0 1px 3px rgba(20,48,58,.06)}
+.tbtn:hover{border-color:var(--accent)}
+.tbtn[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.tbtn svg{width:18px;height:18px;flex:none}
+details.organs{position:relative}
+details.organs summary{list-style:none}
+details.organs summary::-webkit-details-marker{display:none}
+.pop{position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 8px 24px rgba(20,48,58,.14);min-width:250px;display:grid;gap:2px;z-index:8}
+.pop label{display:flex;align-items:center;gap:10px;font-size:16px;padding:7px 4px;cursor:pointer}
+.pop input{width:20px;height:20px;accent-color:var(--accent)}
+.pop .sw{width:14px;height:14px;border-radius:4px}
+.dock{position:absolute;left:10px;right:10px;bottom:10px;display:flex;gap:8px;align-items:flex-end;pointer-events:none;z-index:5}
+.dock-main{flex:1;min-width:0;pointer-events:auto;background:rgba(255,255,255,.96);border:1.5px solid var(--line);border-radius:14px;padding:10px 14px;box-shadow:0 2px 10px rgba(20,48,58,.08)}
+.dock-main .t{font-weight:700;font-size:17px;display:flex;align-items:center;gap:8px}
+.dock-main p{margin:3px 0 0;font-size:16px;max-width:70ch}
+.dock-main .hint{color:var(--ink-2);font-size:15px;margin:0}
+.dock-main .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.dock-main .x{margin-left:auto;border:0;background:var(--surface-2);border-radius:8px;width:36px;height:36px;cursor:pointer;font-size:18px;flex:none}
+.cap-step{font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+.cap-dots{display:inline-flex;gap:5px;margin-left:4px}
+.cap-dots span{width:8px;height:8px;border-radius:50%;background:var(--line)}
+.cap-dots span.on{background:var(--accent)}
+.cap-text{font-size:17px;margin:4px 0 0;font-weight:600}
+.mini{border:1.5px solid var(--line);background:var(--surface);border-radius:9px;padding:6px 11px;font-size:15px;font-weight:600;cursor:pointer;min-height:38px}
+.compass{pointer-events:auto;background:rgba(255,255,255,.96);border:1.5px solid var(--line);border-radius:14px;padding:6px 8px 7px;text-align:center;flex:none;box-shadow:0 2px 10px rgba(20,48,58,.08)}
+.compass svg{width:92px;height:92px;display:block}
+.compass .c1{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-2)}
+.compass .c2{font-size:13px;font-weight:600}
+.panel{width:clamp(320px,32vw,440px);flex:none;background:var(--surface);border:1px solid var(--line);border-radius:18px;overflow:auto;padding:20px 22px 24px;display:flex;flex-direction:column;gap:16px}
+.panel h2{font-family:var(--f-display);font-weight:700;font-size:27px;line-height:1.15;margin:0;text-wrap:balance}
+.panel h3{font-size:18px;margin:0 0 4px;font-weight:700}
+.panel p{margin:0}
+.panel .lead{font-size:17.5px}
+.muted{color:var(--ink-2)}
+.small{font-size:15px}
+.eyebrow{font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2)}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{border:1.5px solid var(--line);background:var(--surface-2);padding:8px 13px;border-radius:999px;font-size:16px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px;min-height:42px}
+.chip i{width:11px;height:11px;border-radius:3px}
+.chip:hover{border-color:var(--accent)}
+.chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent)}
+.card{border:1.5px solid var(--line);border-radius:14px;padding:14px 16px;background:var(--surface-2)}
+.card.sel{border-color:var(--accent);background:var(--accent-soft)}
+.card h3{font-family:var(--f-display);font-size:21px}
+.primary{background:var(--accent);color:var(--accent-ink);border:0;border-radius:12px;padding:12px 16px;font-size:17px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:9px;min-height:50px}
+.primary svg{width:18px;height:18px}
+.secondary{text-align:left;background:var(--surface);color:var(--ink);border:1.5px solid var(--accent);border-radius:12px;padding:11px 15px;font-size:17px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:9px;min-height:50px}
+.secondary svg{width:18px;height:18px}
+.secondary[aria-pressed="true"]{background:var(--accent-soft)}
+.btnrow{display:flex;flex-wrap:wrap;gap:8px}
+.lanes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.lane{border-radius:14px;padding:12px 13px;border:1.5px solid var(--line);background:var(--surface-2);min-width:0}
+.lane.a{border-color:#9FCDDF;background:#EEF7FA}
+.lane.b{border-color:#BDBBEA;background:#F3F2FC}
+.lane h3{font-size:17px}
+.lane .tag{font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.lane.a .tag{color:#16708F}.lane.b .tag{color:#4B48A8}
+.flow{list-style:none;padding:0;margin:8px 0 6px;display:grid;gap:3px;font-size:15px}
+.flow li{display:flex;align-items:center;gap:6px}
+.flow li::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.45;flex:none}
+.lane small{display:block;font-size:13.5px;color:var(--ink-2)}
+.steps{list-style:none;margin:0;padding:0;display:grid;gap:6px;counter-reset:s}
+.steps li{display:grid;grid-template-columns:28px 1fr;gap:8px;align-items:start;font-size:16px;padding:6px 8px;border-radius:10px;counter-increment:s}
+.steps li::before{content:counter(s);width:26px;height:26px;border-radius:50%;background:var(--surface-2);border:1.5px solid var(--line);display:grid;place-items:center;font-weight:700;font-size:14px}
+.steps li.on{background:var(--accent-soft)}
+.steps li.on::before{background:var(--accent);color:#fff;border-color:var(--accent)}
+.scen-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.scen{border:1.5px solid var(--line);background:var(--surface-2);border-radius:12px;padding:10px 12px;text-align:left;cursor:pointer;min-height:64px;display:flex;flex-direction:column;gap:2px}
+.scen b{font-size:16px;line-height:1.2}
+.scen span{font-size:13.5px;color:var(--ink-2)}
+.scen:hover{border-color:var(--accent)}
+.scen[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.badge{display:inline-flex;align-self:flex-start;background:var(--warn-soft);color:var(--warn);font-weight:700;font-size:12.5px;letter-spacing:.07em;text-transform:uppercase;padding:4px 10px;border-radius:6px}
+.qa{display:grid;gap:12px}
+.qa section{border-left:3px solid var(--line);padding-left:12px}
+.qa section h3{font-size:17px}
+.qa section p{font-size:16.5px}
+.cmp{border-radius:14px;padding:12px 14px;background:#EEF6F1;border:1.5px solid #BFDCCB}
+.cmp h3{font-size:16.5px;color:#2A6447}
+.cmp p{font-size:16px}
+.caution{font-size:14.5px;color:var(--ink-2);border-top:1px dashed var(--line);padding-top:10px}
+.legend h3{font-size:15px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2)}
+.legend ul{list-style:none;padding:0;margin:6px 0 0;display:grid;gap:6px}
+.legend li{display:flex;gap:10px;align-items:center;font-size:15.5px}
+.legend .sw{width:18px;height:18px;border-radius:5px;flex:none;border:1px solid rgba(0,0,0,.12)}
+.legend .note{font-size:13.5px;color:var(--ink-2);margin-top:6px}
+.facts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.fact{border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--surface-2)}
+.fact b{display:block;font-family:var(--f-display);font-size:22px;font-variant-numeric:tabular-nums}
+.fact span{font-size:14.5px;color:var(--ink-2)}
+.schem{border:1.5px solid var(--line);border-radius:14px;padding:12px;background:var(--surface)}
+.schem svg{width:100%;height:auto;display:block}
+.erow{display:grid;grid-template-columns:96px 1fr;gap:4px 10px;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.erow:last-child{border-bottom:0}
+.erow .nm{font-weight:700;font-size:15.5px}
+.erow .res{grid-column:2;font-size:14px;color:var(--ink-2)}
+.erow .enz{display:inline-block;font-size:13px;font-weight:700;background:#E2F3F9;color:#13708F;border-radius:6px;padding:1px 7px}
+.chain .b{animation:split 3.4s ease-in-out infinite;transform-box:fill-box}
+.chain .bond{animation:bond 3.4s ease-in-out infinite}
+@keyframes split{0%,22%{transform:translateX(0)}50%,82%{transform:translateX(var(--dx))}100%{transform:translateX(0)}}
+@keyframes bond{0%,22%{opacity:1}42%,84%{opacity:0}100%{opacity:1}}
+.chain.slow .b{animation:none}.chain.slow .bond{animation:none}
+.bars{display:grid;gap:8px}
+.bar{display:grid;grid-template-columns:140px 1fr;gap:10px;align-items:center;font-size:15px}
+.bar .tr{height:16px;border-radius:8px;background:var(--surface-2);border:1px solid var(--line);overflow:hidden}
+.bar .tr i{display:block;height:100%;background:#1C9DC8;border-radius:8px}
+.micro{position:absolute;inset:0;z-index:20;background:var(--surface-2);display:flex;flex-direction:column;gap:10px;padding:14px 16px;overflow:auto}
+.micro-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.zoomtag{display:inline-flex;align-items:center;gap:8px;border:2px dashed var(--accent);color:var(--accent);border-radius:10px;padding:6px 12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:14px}
+.micro-head h2{font-family:var(--f-display);font-size:24px;margin:0}
+.micro-body{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}
+.micro-fig{flex:1.6 1 420px;min-width:0;background:#FFFDF9;border:1.5px solid var(--line);border-radius:14px;padding:8px}
+.micro-fig svg{width:100%;height:auto;display:block}
+.micro-side{flex:1 1 260px;min-width:0;display:grid;gap:8px}
+.mkey{display:flex;gap:10px;align-items:flex-start;text-align:left;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:9px 11px;cursor:pointer}
+.mkey i{width:18px;height:18px;border-radius:50%;flex:none;margin-top:2px;border:1px solid rgba(0,0,0,.15)}
+.mkey b{display:block;font-size:16px}
+.mkey span{font-size:14.5px;color:var(--ink-2)}
+.mkey[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.micro-fig svg .dim{opacity:.22;transition:opacity .25s}
+.micro-fig svg [data-k]{transition:opacity .25s;cursor:pointer}
+.eye-row{display:flex;gap:16px;flex-wrap:wrap;align-items:center}
+.eye-row figure{margin:0;text-align:center;font-size:14px}
+.nogl{position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;font-size:18px}
+@media (prefers-reduced-motion:reduce){.chain .b,.chain .bond{animation:none}}
+@media (max-width:1100px){nav.modes button{padding:9px 13px;font-size:16px}.brand h1{font-size:24px}}
+@media (max-width:760px){
+  .app{height:auto;min-height:100%}
+  main.work{flex-direction:column}
+  .stage{flex:none;height:72vh;min-height:460px}
+  .panel{width:auto;overflow:visible}
+  nav.modes{margin-left:0;width:100%}
+  nav.modes button{flex:1 1 40%}
+  .seg button{padding:7px 9px;font-size:15px}
+  .tbtn{padding:7px 10px;font-size:15px;min-height:42px}
+  .tbtn .tx{display:none}
+  .compass svg{width:74px;height:74px}
+  .lbl{font-size:13px;padding:3px 7px}
+  .dock-main .hint{font-size:13.5px}
+  .lanes,.scen-grid,.facts{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand">
+      <h1>Atlas trzustki</h1>
+      <p>Interaktywny model do rozmowy z pacjentem</p>
+    </div>
+    <nav class="modes" aria-label="Tryby prezentacji">
+      <button data-mode="build" aria-pressed="true">Budowa</button>
+      <button data-mode="func" aria-pressed="false">Funkcje</button>
+      <button data-mode="disease" aria-pressed="false">Choroby</button>
+      <button data-mode="healthy" aria-pressed="false">Zdrowa trzustka</button>
+    </nav>
+    <button class="fsbtn" id="fsBtn" title="Pełny ekran">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" width="18" height="18"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      <span id="fsTx">Pełny ekran</span>
+    </button>
+  </header>
+  <div class="draft"><b>Wersja do zatwierdzenia przez lekarza.</b> Model jest uproszczony, a wszystkie przykłady zmian chorobowych są ilustracyjne. Nie służą do stawiania rozpoznania.</div>
+
+  <main class="work">
+    <section class="stage" id="stage" aria-label="Model 3D trzustki">
+      <div id="gl"></div>
+      <svg id="leaders"></svg>
+      <div id="labels"></div>
+
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Rodzaj widoku">
+          <button data-view="external" aria-pressed="true">Zewnętrzny</button>
+          <button data-view="section" aria-pressed="false">Przekrój</button>
+          <button data-view="transparent" aria-pressed="false">Przezroczysty</button>
+        </div>
+        <div class="tools">
+          <button class="tbtn" id="lblBtn" aria-pressed="true" title="Podpisy">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M4 12h16M4 18h7"/></svg><span class="tx">Podpisy</span>
+          </button>
+          <details class="organs" id="organs">
+            <summary class="tbtn" title="Narządy sąsiednie">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="9" r="4"/><circle cx="16" cy="15" r="4"/></svg><span class="tx">Narządy sąsiednie</span>
+            </summary>
+            <div class="pop" id="organPop"></div>
+          </details>
+          <button class="tbtn" id="resetBtn" title="Widok początkowy">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4h4"/></svg><span class="tx">Widok początkowy</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="dock" id="dock">
+        <div class="dock-main" id="dockMain"></div>
+        <div class="compass" title="P i L — prawa i lewa strona pacjenta; G i S — w stronę głowy i stóp; Pr i T — przód (brzuch) i tył (plecy)">
+          <div class="c1">Strony pacjenta</div>
+          <svg id="compass" viewBox="0 0 96 96"></svg>
+          <div class="c2" id="viewName">Widok od przodu</div>
+        </div>
+      </div>
+
+      <div class="micro" id="micro" hidden></div>
+    </section>
+
+    <aside class="panel" id="panel" aria-live="polite"></aside>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(function(){
+"use strict";
+const $=(s,el=document)=>el.querySelector(s);
+const REDUCED = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ======================= KOLORY ======================= */
+const COL={panc:0xE2B089,pancCut:0xF3D7B8,duo:0xD8A29B,stom:0xE7AFA6,spleen:0x8C4B5F,gb:0x6E9A57,bile:0x86A834,
+  wirs:0x2A86B3,vein:0x9E3445,islet:0xD9479A,isletBad:0x9AA3A6,inflam:0xE2654B,halo:0xF0845A,fib:0xB5ADA4,calc:0xFFF6DF,
+  cyst:0x56A9D6,cystWall:0xC9B28E,tumor:0x6C4A7E,stone:0xA67C32,enz:0x1C9DC8,food:0xB88752,fat:0xE6BE36,ins:0x4C4FCB,
+  glc:0xE8912B,glu:0xFFFFFF,papilla:0xC6646F,epiPanc:0xE6C7A9};
+const hex=c=>'#'+c.toString(16).padStart(6,'0');
+
+/* ======================= STRUKTURY ======================= */
+const STRUCT={
+  head:{name:'Głowa trzustki',desc:'Najszersza część trzustki. Leży po prawej stronie ciała, w zakolu dwunastnicy, która ma kształt litery C. Przechodzi przez nią końcowy odcinek przewodu żółciowego. Tak jak cała trzustka wytwarza sok trawienny i hormony.',anchor:[-2.5,0.35,0.32],col:COL.panc,label:true},
+  uncinate:{name:'Wyrostek haczykowaty',desc:'Niewielka, zagięta część głowy trzustki. Wsuwa się do tyłu, za duże naczynia krwionośne jelit. Pełni te same funkcje co reszta trzustki; jego położenie ma znaczenie m.in. przy planowaniu operacji.',anchor:[-1.55,-1.0,-0.3],col:COL.panc,label:true},
+  neck:{name:'Szyjka trzustki',desc:'Krótki, węższy odcinek, który łączy głowę z trzonem. Leży bezpośrednio przed dużą żyłą (żyłą wrotną), która prowadzi krew z jelit do wątroby.',anchor:[-1.35,1.02,0.47],col:COL.panc,label:true},
+  body:{name:'Trzon trzustki',desc:'Środkowa, najdłuższa część trzustki. Biegnie poprzecznie przez brzuch, za żołądkiem, na wysokości kręgosłupa.',anchor:[0.35,1.16,0.46],col:COL.panc,label:true},
+  tail:{name:'Ogon trzustki',desc:'Końcowa, zwężająca się część trzustki. Kieruje się w lewo i do tyłu, w stronę śledziony. Ma stosunkowo dużo wysp trzustkowych, które wytwarzają hormony.',anchor:[2.95,1.95,-0.5],col:COL.panc,label:true},
+  wirsung:{name:'Przewód trzustkowy główny (przewód Wirsunga)',short:'Przewód Wirsunga',desc:'Kanał biegnący wzdłuż całej trzustki, od ogona do głowy. Zbiera sok trawienny z drobnych przewodzików, tak jak rzeka zbiera dopływy, i odprowadza go do dwunastnicy.',anchor:[1.25,1.38,-0.08],col:COL.wirs,label:true},
+  cbd:{name:'Przewód żółciowy wspólny',desc:'Kanał, którym żółć z wątroby i pęcherzyka żółciowego spływa do dwunastnicy. Jego końcowy odcinek przechodzi przez głowę trzustki. Dlatego choroby głowy trzustki mogą utrudniać odpływ żółci.',anchor:[-2.77,2.15,-0.36],col:COL.bile,label:true},
+  hepatic:{name:'Przewód wątrobowy wspólny i przewód pęcherzykowy',short:'Przewód wątrobowy i pęcherzykowy',desc:'Przewód wątrobowy prowadzi żółć z wątroby (wątroba nie jest pokazana na modelu). Przewód pęcherzykowy łączy go z pęcherzykiem żółciowym. Po ich połączeniu powstaje przewód żółciowy wspólny.',anchor:[-2.6,3.7,-0.2],col:COL.bile,label:false},
+  papilla:{name:'Brodawka większa dwunastnicy — ujście przewodów',short:'Ujście przewodów (brodawka)',desc:'Niewielkie wzniesienie na wewnętrznej ścianie dwunastnicy. Najczęściej uchodzą tu razem przewód trzustkowy i przewód żółciowy. Mięsień w tym miejscu (zwieracz Oddiego) reguluje wypływ soku trzustkowego i żółci do jelita.',anchor:[-3.06,-0.22,-0.12],col:COL.papilla,label:true},
+  duodenum:{name:'Dwunastnica',desc:'Pierwszy odcinek jelita cienkiego, w kształcie litery C. Obejmuje głowę trzustki. Tu sok trzustkowy i żółć mieszają się z pokarmem z żołądka.',anchor:[-3.88,0.6,-0.1],col:COL.duo,label:true,organ:true},
+  stomach:{name:'Żołądek',desc:'Leży przed trzustką, bliżej powłok brzucha. Rozdrabnia i wstępnie trawi pokarm, a potem przesuwa go do dwunastnicy. Na modelu jest półprzezroczysty, aby było widać trzustkę za nim.',anchor:[3.35,3.4,1.95],col:COL.stom,label:true,organ:true},
+  spleen:{name:'Śledziona',desc:'Leży w lewej górnej części brzucha, przy ogonie trzustki. Filtruje krew i bierze udział w obronie przed zakażeniami. Nie wytwarza enzymów trawiennych.',anchor:[5.3,3.05,-1.3],col:COL.spleen,label:true,organ:true},
+  gallbladder:{name:'Pęcherzyk żółciowy',desc:'Mały zbiornik pod wątrobą, który magazynuje żółć. Po posiłku kurczy się i wypycha żółć do przewodów. Powstające w nim kamienie mogą przesunąć się do przewodu żółciowego.',anchor:[-4.25,2.45,0.95],col:COL.gb,label:true,organ:true},
+  veins:{name:'Żyła wrotna i jej dopływy',short:'Żyły (krew do wątroby)',desc:'Duże żyły biegnące za trzustką. Zbierają krew z jelit i śledziony i prowadzą ją do wątroby. Do tej krwi trafiają hormony trzustki, m.in. insulina i glukagon.',anchor:[-1.62,2.35,-0.38],col:COL.vein,label:true,organ:true}
+};
+const PANC_SEGS=['head','uncinate','neck','body','tail'];
+
+/* ======================= POMOCNICZE ======================= */
+function mulberry(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function clamp(x,a,b){return Math.max(a,Math.min(b,x));}
+function smooth(x){x=clamp(x,0,1);return x*x*(3-2*x);}
+function keyInterp(keys,t){
+  if(t<=keys[0][0])return keys[0].slice(1);
+  for(let i=0;i<keys.length-1;i++){const k0=keys[i],k1=keys[i+1];if(t<=k1[0]){const s=smooth((t-k0[0])/(k1[0]-k0[0]));return k0.slice(1).map((v,j)=>v+(k1[j+1]-v)*s);}}
+  return keys[keys.length-1].slice(1);
+}
+function capF(t,s,e){let f=1;if(s>0&&t<s){const x=t/s;f*=Math.sqrt(Math.max(0,1-(1-x)*(1-x)));}if(e>0&&t>1-e){const x=(1-t)/e;f*=Math.sqrt(Math.max(0,1-(1-x)*(1-x)));}return f;}
+
+/* ======================= WebGL ======================= */
+const stage=$('#stage');
+let renderer;
+try{
+  renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});
+}catch(e){
+  stage.insertAdjacentHTML('beforeend','<div class="nogl">Ta przeglądarka nie może wyświetlić modelu 3D (brak WebGL). Spróbuj w aktualnej wersji Chrome, Edge, Safari lub Firefox.</div>');
+  return;
+}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.setClearColor(0x000000,0);
+$('#gl').appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(35,1,0.1,200);
+const controls=new THREE.OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true;controls.dampingFactor=0.08;controls.minDistance=4;controls.maxDistance=42;controls.rotateSpeed=0.85;controls.zoomSpeed=0.9;
+scene.add(new THREE.HemisphereLight(0xffffff,0xb7c5c9,0.78));
+const dl1=new THREE.DirectionalLight(0xffffff,0.62);dl1.position.set(4,8,10);scene.add(dl1);
+const dl2=new THREE.DirectionalLight(0xffffff,0.32);dl2.position.set(-6,-3,-8);scene.add(dl2);
+scene.add(new THREE.AmbientLight(0xffffff,0.14));
+const V=(x,y,z)=>new THREE.Vector3(x,y,z);
+const curve=pts=>new THREE.CatmullRomCurve3(pts.map(p=>V(p[0],p[1],p[2])),false,'centripetal');
+
+/* ======================= KRZYWE ANATOMICZNE =======================
+   Układ: +x = lewa strona pacjenta, +y = w stronę głowy, +z = przód (brzuch). Widok początkowy: od przodu. */
+const C={
+  main:curve([[-2.25,0.75,-0.05],[-1.65,0.95,0.15],[-1.0,1.05,0.25],[-0.2,1.1,0.2],[0.7,1.25,0.0],[1.6,1.5,-0.3],[2.5,1.8,-0.65],[3.3,2.05,-0.95],[3.85,2.2,-1.15]]),
+  head:curve([[-2.2,1.05,-0.12],[-2.4,0.55,-0.15],[-2.5,-0.05,-0.15],[-2.45,-0.6,-0.2]]),
+  unc:curve([[-2.45,-0.45,-0.22],[-2.2,-0.85,-0.35],[-1.7,-1.0,-0.45],[-1.15,-0.95,-0.5]]),
+  duo:curve([[-1.25,1.9,0.95],[-1.9,2.0,0.6],[-2.6,1.95,0.2],[-3.25,1.65,-0.05],[-3.45,0.9,-0.1],[-3.45,0.0,-0.12],[-3.4,-0.8,-0.15],[-3.1,-1.5,-0.2],[-2.3,-1.8,-0.25],[-1.2,-1.85,-0.3],[-0.1,-1.75,-0.3],[0.7,-1.4,-0.25],[1.0,-0.8,-0.15],[1.0,-0.25,0.0],[1.45,-0.35,0.45],[1.9,-0.8,0.7]]),
+  stom:curve([[2.25,4.55,1.15],[2.65,3.85,1.5],[2.5,2.85,1.78],[1.9,1.9,1.95],[1.0,1.3,2.0],[0.0,1.3,1.85],[-0.75,1.6,1.5],[-1.15,1.85,1.1],[-1.3,1.9,0.9]]),
+  eso:curve([[1.35,5.9,0.25],[1.45,5.0,0.6],[1.6,4.35,0.95]]),
+  gb:curve([[-3.95,2.35,0.95],[-3.6,2.85,0.7],[-3.25,3.3,0.4]]),
+  cystic:curve([[-3.25,3.3,0.4],[-3.1,3.48,0.18],[-2.88,3.25,-0.02],[-2.72,2.92,-0.2]]),
+  hep:curve([[-2.5,4.6,-0.2],[-2.6,3.7,-0.2],[-2.72,2.92,-0.2]]),
+  cbd:curve([[-2.72,2.92,-0.2],[-2.76,2.2,-0.36],[-2.8,1.35,-0.32],[-2.82,0.65,-0.2],[-2.86,0.1,-0.16],[-2.95,-0.14,-0.13],[-3.02,-0.2,-0.12]]),
+  vein:curve([[4.05,2.35,-1.5],[3.2,1.95,-1.35],[2.3,1.6,-1.05],[1.3,1.25,-0.62],[0.3,1.05,-0.38],[-0.9,1.0,-0.22],[-1.35,1.6,-0.3],[-1.75,2.6,-0.4],[-2.05,3.8,-0.45]]),
+  smv:curve([[-0.8,-2.8,0.45],[-0.85,-1.9,0.3],[-0.9,-1.15,-0.02],[-0.9,-0.2,-0.14],[-0.9,1.0,-0.22]])
+};
+(function(){const pts=[];for(let t=0.97;t>0.05;t-=0.04)pts.push(C.main.getPointAt(t));
+  [[-2.15,0.8,-0.06],[-2.4,0.42,-0.14],[-2.6,0.02,-0.15],[-2.86,-0.17,-0.14],[-3.0,-0.23,-0.12]].forEach(p=>pts.push(V(p[0],p[1],p[2])));
+  C.wirs=new THREE.CatmullRomCurve3(pts,false,'centripetal');})();
+function nearestU(c,p,n=300){let best=0,bd=1e9;const tmp=new THREE.Vector3();for(let i=0;i<=n;i++){c.getPointAt(i/n,tmp);const d=tmp.distanceToSquared(p);if(d<bd){bd=d;best=i/n;}}return best;}
+const PAPILLA=V(-3.06,-0.22,-0.12);
+const duoP=nearestU(C.duo,PAPILLA,500);
+const veinConf=nearestU(C.vein,V(-0.9,1.0,-0.22));
+
+/* ======================= TEKSTURY ======================= */
+function makeTex(kind){
+  const cv=document.createElement('canvas');cv.width=512;cv.height=256;const g=cv.getContext('2d');
+  g.fillStyle='#ffffff';g.fillRect(0,0,512,256);const r=mulberry(kind==='fib'?11:kind==='cut'?5:3);
+  const blob=(x,y,rx,ry,a,fill,stroke,lw)=>{for(const dx of[-512,0,512])for(const dy of[-256,0,256]){g.beginPath();g.ellipse(x+dx,y+dy,rx,ry,a,0,Math.PI*2);if(fill){g.fillStyle=fill;g.fill();}if(stroke){g.strokeStyle=stroke;g.lineWidth=lw;g.stroke();}}};
+  const n=kind==='cut'?150:260;
+  for(let i=0;i<n;i++){const rr=(kind==='cut'?14:9)+r()*(kind==='cut'?14:12);const sh=200+r()*45|0;
+    blob(r()*512,r()*256,rr,rr*(0.7+r()*0.5),r()*3,`rgba(${sh},${sh-10},${sh-22},${kind==='cut'?0.45:0.32})`,`rgba(120,82,58,${kind==='cut'?0.42:0.26})`,kind==='cut'?2.2:1.4);}
+  if(kind==='fib'){
+    for(let i=0;i<70;i++){g.strokeStyle=`rgba(${95+r()*30|0},${92+r()*30|0},${90+r()*30|0},${0.35+r()*0.3})`;g.lineWidth=2+r()*6;g.beginPath();let x=r()*512,y=r()*256;g.moveTo(x,y);for(let k=0;k<4;k++){x+=(r()-0.5)*120;y+=(r()-0.5)*60;g.lineTo(x,y);}g.stroke();}
+    for(let i=0;i<30;i++)blob(r()*512,r()*256,10+r()*22,8+r()*14,r()*3,'rgba(150,145,140,.35)',null,0);
+  }
+  const t=new THREE.CanvasTexture(cv);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=4;return t;
+}
+const TEX={lob:makeTex('lob'),fib:makeTex('fib'),cut:makeTex('cut')};
+
+/* ======================= BUDOWA RUR (generyczna) ======================= */
+const ZREF=V(0,0,1),XREF=V(1,0,0);
+function frameAt(c,t){const P=c.getPointAt(t),T=c.getTangentAt(t);const N=new THREE.Vector3().crossVectors(ZREF,T);if(N.lengthSq()<1e-4)N.crossVectors(XREF,T);N.normalize();const B=new THREE.Vector3().crossVectors(T,N).normalize();return{P,N,B};}
+function buildTube(o){
+  const c=o.c,t0=o.t0||0,t1=(o.t1==null?1:o.t1),segs=o.segs||60,radial=o.radial||40,half=!!o.half,noise=o.noise,uScale=o.uScale||8,across=6;
+  const pos=[],uv=[],idx=[],cpos=[],cuv=[],cidx=[];const rn=radial+1;
+  for(let i=0;i<=segs;i++){
+    const t=t0+(t1-t0)*i/segs;const F=frameAt(c,t);const r=o.rFn(t);const rw=r[0],rd=r[1];const ring=[];
+    for(let j=0;j<=radial;j++){
+      const th=half?Math.PI+Math.PI*j/radial:-Math.PI/2+2*Math.PI*j/radial;const k=noise?1+noise(t,th):1;
+      const cx=Math.cos(th)*rw*k,sy=Math.sin(th)*rd*k;
+      const x=F.P.x+F.N.x*cx+F.B.x*sy,y=F.P.y+F.N.y*cx+F.B.y*sy,z=F.P.z+F.N.z*cx+F.B.z*sy;
+      pos.push(x,y,z);uv.push(t*uScale,j/radial*2);ring.push([x,y,z]);
+    }
+    if(half&&o.cut){const a=ring[0],b=ring[radial];for(let k=0;k<=across;k++){const f=k/across;cpos.push(a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,a[2]+(b[2]-a[2])*f);cuv.push(t*uScale*0.8,f);}}
+  }
+  for(let i=0;i<segs;i++)for(let j=0;j<radial;j++){const a=i*rn+j,b=(i+1)*rn+j;idx.push(a,a+1,b,b,a+1,b+1);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));g.setIndex(idx);g.computeVertexNormals();
+  let cg=null;
+  if(half&&o.cut){const an=across+1;for(let i=0;i<segs;i++)for(let k=0;k<across;k++){const a=i*an+k,b=(i+1)*an+k;cidx.push(a,b,a+1,b,b+1,a+1);}
+    cg=new THREE.BufferGeometry();cg.setAttribute('position',new THREE.Float32BufferAttribute(cpos,3));cg.setAttribute('uv',new THREE.Float32BufferAttribute(cuv,2));cg.setIndex(cidx);cg.computeVertexNormals();}
+  return{g,cg};
+}
+
+/* ======================= MATERIAŁY / SIATKI ======================= */
+function mat(color,o){return new THREE.MeshStandardMaterial(Object.assign({color,roughness:0.62,metalness:0},o||{}));}
+const allMeshes=[];
+function addMesh(sid,geom,material,role){const m=new THREE.Mesh(geom,material);m.userData={sid,role};scene.add(m);allMeshes.push(m);if(sid&&STRUCT[sid]){(STRUCT[sid].meshes=STRUCT[sid].meshes||[]).push(m);}return m;}
+
+/* --- trzustka --- */
+const RK={main:[[0,.56,.42],[.1,.36,.27],[.2,.4,.28],[.4,.46,.31],[.6,.44,.28],[.85,.36,.25],[1,.28,.21]],
+  head:[[0,.5,.38],[.35,.63,.46],[.7,.61,.44],[1,.5,.38]],unc:[[0,.42,.3],[.5,.32,.22],[1,.2,.15]]};
+const SEGDEF={head:{c:C.head,t0:0,t1:1,k:'head',segs:56},uncinate:{c:C.unc,t0:0,t1:1,k:'unc',segs:36},neck:{c:C.main,t0:0,t1:0.2,k:'main',segs:26},body:{c:C.main,t0:0.2,t1:0.6,k:'main',segs:52},tail:{c:C.main,t0:0.6,t1:1,k:'main',segs:56}};
+function pancR(key,t,mul){let k,f;if(key==='head'){k=keyInterp(RK.head,t);f=capF(t,.22,.22);}else if(key==='unc'){k=keyInterp(RK.unc,t);f=capF(t,0,.2);}else{k=keyInterp(RK.main,t);f=capF(t,0,.07);}return[k[0]*f*mul,k[1]*f*mul];}
+function pancNoise(P){if(P.irreg)return(t,th)=>P.irreg*(Math.sin(t*23+th*2)*0.6+Math.sin(t*61-th*3+0.7)*0.4);
+  return(t,th)=>P.lob*(0.55*Math.sin(t*90+th*3)+0.3*Math.sin(t*170-th*5+1.3)+0.15*Math.sin(t*41+th*9));}
+const PANC={};
+const cutMatBase=()=>mat(COL.pancCut,{map:TEX.cut,roughness:0.8});
+PANC_SEGS.forEach(s=>{
+  const m=mat(COL.panc,{map:TEX.lob,bumpMap:TEX.lob,bumpScale:0.025,roughness:0.66});
+  const cm=cutMatBase();
+  PANC[s]={mat:m,cutMat:cm,full:addMesh(s,new THREE.BufferGeometry(),m,'full'),half:addMesh(s,new THREE.BufferGeometry(),m,'half'),cut:addMesh(s,new THREE.BufferGeometry(),cm,'cut')};
+});
+let pancKey='';
+function buildPancreas(P){
+  const key=JSON.stringify(P);if(key===pancKey)return;pancKey=key;
+  const noise=pancNoise(P);
+  PANC_SEGS.forEach(s=>{const d=SEGDEF[s];const rFn=t=>pancR(d.k,t,P.mul);const k=d.c.getLength()/C.main.getLength();const nz=(t,th)=>noise(t*k,th);const us=8*k;
+    const A=buildTube({c:d.c,t0:d.t0,t1:d.t1,segs:d.segs,radial:44,rFn,noise:nz,uScale:us});
+    const H=buildTube({c:d.c,t0:d.t0,t1:d.t1,segs:d.segs,radial:24,rFn,noise:nz,half:true,cut:true,uScale:us});
+    const p=PANC[s];p.full.geometry.dispose();p.half.geometry.dispose();p.cut.geometry.dispose();p.full.geometry=A.g;p.half.geometry=H.g;p.cut.geometry=H.cg;});
+}
+/* --- obrzęk (halo) --- */
+const haloMat=mat(COL.halo,{transparent:true,opacity:0.0,depthWrite:false,roughness:0.9});
+const halo=[];PANC_SEGS.forEach(s=>{const d=SEGDEF[s];const g=buildTube({c:d.c,t0:d.t0,t1:d.t1,segs:d.segs,radial:36,rFn:t=>pancR(d.k,t,1.24)}).g;const m=addMesh(null,g,haloMat,'extra');m.renderOrder=6;halo.push(m);});
+
+/* --- dwunastnica --- */
+const duoR=t=>{const f=capF(t,0,.03);return[.42*f,.4*f];};
+const duoMat=mat(COL.duo,{roughness:0.6,side:THREE.DoubleSide});
+const duoFull=addMesh('duodenum',buildTube({c:C.duo,segs:220,radial:36,rFn:duoR}).g,duoMat,'full');
+const duoHalf=addMesh('duodenum',buildTube({c:C.duo,segs:220,radial:22,rFn:duoR,half:true}).g,duoMat,'half');
+/* --- żołądek --- */
+const stomMat=mat(COL.stom,{transparent:true,opacity:0.24,depthWrite:false,roughness:0.55,side:THREE.DoubleSide});
+const stomKeys=[[0,.9,.7],[.15,1.15,.85],[.4,1.1,.8],[.6,.85,.65],[.8,.55,.45],[1,.33,.3]];
+const stomach=addMesh('stomach',buildTube({c:C.stom,segs:110,radial:44,rFn:t=>{const k=keyInterp(stomKeys,t),f=capF(t,.12,0);return[k[0]*f,k[1]*f];}}).g,stomMat,'ghost');stomach.renderOrder=10;
+const eso=addMesh('stomach',buildTube({c:C.eso,segs:20,radial:20,rFn:()=>[.22,.22]}).g,stomMat,'ghost');eso.renderOrder=10;
+/* --- śledziona --- */
+(function(){const g=new THREE.SphereGeometry(1,48,32);const p=g.attributes.position;for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i);const n=1+0.05*Math.sin(x*5+y*3)+0.03*Math.sin(z*7-y*4)-(x<-0.3?0.12*(-x-0.3):0);p.setXYZ(i,x*n,y*n,z*n);}g.computeVertexNormals();
+  const m=addMesh('spleen',g,mat(COL.spleen,{roughness:0.5}),'solid');m.scale.set(0.72,1.32,1.0);m.rotation.set(0.25,0.15,-0.4);m.position.set(4.78,2.75,-1.65);})();
+/* --- pęcherzyk --- */
+const gbKeys=[[0,.5,.44],[.45,.46,.4],[.85,.26,.24],[1,.18,.17]];
+const gbG=buildTube({c:C.gb,segs:40,radial:32,rFn:t=>{const k=keyInterp(gbKeys,t),f=capF(t,.28,0);return[k[0]*f,k[1]*f];}}).g;
+const gbCenter=C.gb.getPointAt(0.35);gbG.translate(-gbCenter.x,-gbCenter.y,-gbCenter.z);
+const gbMat=mat(COL.gb,{roughness:0.45});
+const gall=addMesh('gallbladder',gbG,gbMat,'solid');gall.position.copy(gbCenter);
+/* --- przewody --- */
+const wirsMat=mat(COL.wirs,{roughness:0.4,emissive:0x0b3550,emissiveIntensity:0.25});
+const bileMat=mat(COL.bile,{roughness:0.4,emissive:0x2e3a07,emissiveIntensity:0.2});
+const hepMat=mat(COL.bile,{roughness:0.4,emissive:0x2e3a07,emissiveIntensity:0.2});
+const wirsMesh=addMesh('wirsung',new THREE.BufferGeometry(),wirsMat,'duct');
+const cbdMesh=addMesh('cbd',new THREE.BufferGeometry(),bileMat,'duct');
+addMesh('hepatic',buildTube({c:C.hep,segs:30,radial:14,rFn:t=>{const f=capF(t,.06,0);return[.085*f,.085*f];}}).g,hepMat,'duct');
+addMesh('hepatic',buildTube({c:C.cystic,segs:24,radial:12,rFn:()=>[.05,.05]}).g,hepMat,'duct');
+const papMat=mat(COL.papilla,{roughness:0.5});
+const pap=addMesh('papilla',new THREE.SphereGeometry(0.11,24,16),papMat,'solid');pap.position.copy(PAPILLA);pap.scale.set(0.8,1,1);
+let ductKey='';
+function buildDucts(D){
+  const key=JSON.stringify(D);if(key===ductKey)return;ductKey=key;
+  const wr=u=>{let r=.055;
+    if(D.wirs==='beaded')r=Math.max(.05,.1+.045*Math.sin(u*55));
+    else if(D.wirs==='headBlock')r=u<.8?.1:(u<.9?.1-(u-.8)*.65:.035);
+    else if(D.wirs==='bodyBlock')r=u<.36?.085:(u<.5?.04:.055);
+    else if(D.wirs==='thin')r=.045;
+    const f=capF(u,.02,0);return[r*f,r*f];};
+  const W=buildTube({c:C.wirs,segs:180,radial:14,rFn:wr});wirsMesh.geometry.dispose();wirsMesh.geometry=W.g;
+  const cr=t=>{let r=.09;if(D.cbd==='jaundice'){const y=C.cbd.getPointAt(t).y;r=y>0.95?.17:(y>0.8?.035+(y-0.8)/.15*.135:(y>-0.05?.035:.06));}return[r,r];};
+  const B=buildTube({c:C.cbd,segs:90,radial:16,rFn:cr});cbdMesh.geometry.dispose();cbdMesh.geometry=B.g;
+}
+/* --- żyły --- */
+const veinMat=mat(COL.vein,{roughness:0.45,transparent:true,opacity:0.62,depthWrite:false});
+const veinA=addMesh('veins',buildTube({c:C.vein,segs:120,radial:16,rFn:t=>{const f=capF(t,.02,.02);return[.12*f,.12*f];}}).g,veinMat,'vessel');
+const veinB=addMesh('veins',buildTube({c:C.smv,segs:60,radial:16,rFn:t=>{const f=capF(t,.03,0);return[.11*f,.11*f];}}).g,veinMat,'vessel');
+veinA.renderOrder=veinB.renderOrder=4;
+
+/* --- wyspy (schematyczne, powiększone) --- */
+const isletGeo=new THREE.SphereGeometry(1,14,10);
+const isletMatOK=mat(COL.islet,{emissive:COL.islet,emissiveIntensity:0.45,roughness:0.4});
+const isletMatBad=mat(COL.isletBad,{emissive:0x555c5e,emissiveIntensity:0.15,roughness:0.7});
+const islets=[];
+(function(){const r=mulberry(42);
+  for(let i=0;i<38;i++){let c,t,key;
+    if(i<26){c=C.main;t=0.22+Math.pow(r(),0.6)*0.74;key='main';}else if(i<34){c=C.head;t=0.15+r()*0.7;key='head';}else{c=C.main;t=0.03+r()*0.17;key='main';}
+    const F=frameAt(c,t);const rr=pancR(key,t,1);const a=r()*Math.PI*2,d=Math.sqrt(r())*0.62;
+    const p=F.P.clone().addScaledVector(F.N,Math.cos(a)*d*rr[0]).addScaledVector(F.B,Math.sin(a)*d*rr[1]);
+    const m=addMesh(null,isletGeo,isletMatOK,'extra');m.position.copy(p);m.scale.setScalar(0.055+r()*0.02);m.renderOrder=3;
+    islets.push({m,p,u:nearestU(C.vein,p,160),bad:r()});}})();
+/* --- zwapnienia --- */
+const calcs=[];(function(){const r=mulberry(9);const g=new THREE.IcosahedronGeometry(1,1);const m=mat(0xFFFFFF,{emissive:0x9a9480,emissiveIntensity:0.35,roughness:0.25});
+  for(let i=0;i<26;i++){let p;if(i<12){p=C.wirs.getPointAt(0.05+r()*0.85);}else{const c=i<22?C.main:C.head;const t=c===C.main?0.1+r()*0.85:0.2+r()*0.6;const F=frameAt(c,t);const rr=pancR(c===C.main?'main':'head',t,0.85);const a=r()*Math.PI*2,d=0.25+r()*0.45;p=F.P.clone().addScaledVector(F.N,Math.cos(a)*d*rr[0]).addScaledVector(F.B,Math.sin(a)*d*rr[1]);}
+    const mm=addMesh(null,g,m,'extra');mm.position.copy(p);mm.scale.setScalar(0.045+r()*0.04);mm.rotation.set(r()*3,r()*3,0);calcs.push(mm);}})();
+/* --- guz --- */
+function lumpGeo(seed,amp){const g=new THREE.IcosahedronGeometry(1,4);const p=g.attributes.position;const r=mulberry(seed);const a=[r()*6,r()*6,r()*6];
+  for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i);const n=1+amp*(Math.sin(3.1*x+a[0])*Math.sin(2.7*y+a[1])*0.6+Math.sin(5.3*z+a[2]+x*2)*0.4);p.setXYZ(i,x*n,y*n,z*n);}g.computeVertexNormals();return g;}
+const tumorMat=mat(COL.tumor,{roughness:0.82});
+const tumor=addMesh(null,lumpGeo(4,0.16),tumorMat,'extra');
+const TUMOR_POS={head:{p:[-2.55,0.42,-0.02],s:[0.58,0.56,0.6]},body:{p:[0.45,1.2,0.12],s:[0.5,0.48,0.46]},tail:{p:[2.95,1.92,-0.78],s:[0.48,0.46,0.44]}};
+/* --- torbiele --- */
+const cystMat=mat(COL.cyst,{transparent:true,opacity:0.7,roughness:0.15,depthWrite:false,emissive:0x0d3a52,emissiveIntensity:0.15});
+const wallMat=mat(COL.cystWall,{transparent:true,opacity:0.32,depthWrite:false,roughness:0.9});
+const pseudo=addMesh(null,new THREE.SphereGeometry(0.68,40,28),cystMat,'extra');pseudo.position.set(1.25,2.3,0.42);pseudo.scale.set(1,0.92,0.86);pseudo.renderOrder=7;
+const pseudoWall=addMesh(null,new THREE.SphereGeometry(0.75,40,28),wallMat,'extra');pseudoWall.position.copy(pseudo.position);pseudoWall.scale.copy(pseudo.scale);pseudoWall.renderOrder=8;
+const otherCysts=[[0.22,1.17,0.33,.2],[0.5,1.24,0.27,.16],[0.02,1.09,0.26,.14],[0.36,1.0,0.22,.13],[0.65,1.15,0.2,.11]].map(a=>{const m=addMesh(null,new THREE.SphereGeometry(1,28,20),cystMat,'extra');m.position.set(a[0],a[1],a[2]);m.scale.setScalar(a[3]);m.renderOrder=7;return m;});
+/* --- kamień --- */
+const stone=addMesh(null,lumpGeo(2,0.12),mat(COL.stone,{roughness:0.85}),'extra');stone.scale.setScalar(0.11);
+
+/* ======================= STAN ======================= */
+const state={mode:'build',view:'external',labels:true,organs:{duodenum:true,stomach:true,spleen:true,gallbladder:true,veins:false},
+  selected:null,scenario:null,variant:{cyst:'pseudo',cancer:'head',diabetes:'t1'},showHealthy:false,anim:null,micro:false};
+
+/* ======================= SCENARIUSZE ======================= */
+const SCEN=[
+ {id:'acute',title:'Ostre zapalenie trzustki',short:'Obrzęk i stan zapalny',
+  change:'Trzustka jest obrzęknięta i objęta stanem zapalnym. Na modelu pokazuje to czerwono-pomarańczowy kolor i poszerzony obrys wokół narządu. Wokół trzustki może też gromadzić się płyn.',
+  effect:'Enzymy trawienne uaktywniają się za wcześnie, jeszcze w trzustce, i podrażniają jej tkankę. Zapalenie bywa łagodne i ustępuje, ale może też być ciężkie i wymagać leczenia w szpitalu.',
+  symptoms:'Najczęściej nagły, silny ból w górnej części brzucha, często promieniujący do pleców. Mogą wystąpić nudności, wymioty i gorączka. Podobnie mogą objawiać się inne choroby — potrzebne są badania krwi i badania obrazowe.',
+  healthy:'W zdrowej trzustce enzymy pozostają nieaktywne, dopóki nie dotrą do dwunastnicy, a sok swobodnie odpływa przewodem.',
+  note:'Animacja pokazuje jedną z częstych przyczyn: kamień żółciowy. Inną częstą przyczyną jest alkohol; są też przyczyny rzadsze.',
+  legend:[[COL.inflam,'Stan zapalny (oznaczenie umowne)'],[COL.halo,'Obrzęk wokół trzustki'],[COL.stone,'Kamień żółciowy (złóg)']]},
+ {id:'chronic',title:'Przewlekłe zapalenie trzustki',short:'Włóknienie i zwapnienia',
+  change:'Długotrwały stan zapalny stopniowo zastępuje zdrową tkankę tkanką bliznowatą (włóknienie). Mogą tworzyć się zwapnienia. Przewód trzustkowy bywa nierówny — miejscami zwężony, miejscami poszerzony.',
+  effect:'Ubywa komórek, które wytwarzają enzymy, a z czasem bywa, że także tych, które wytwarzają insulinę. Może to prowadzić do kłopotów z trawieniem lub do cukrzycy, ale nie dzieje się tak u każdego.',
+  symptoms:'Nawracający albo stały ból brzucha, często nasilający się po jedzeniu. Mogą pojawić się tłuste stolce, chudnięcie lub objawy cukrzycy. Niektóre osoby mają niewiele dolegliwości.',
+  healthy:'Zdrowa trzustka ma miękką, zrazikową tkankę i gładki, cienki przewód trzustkowy.',
+  note:'Obraz choroby może się wyraźnie różnić między pacjentami. Model pokazuje jeden przykład, w którym widać kilka zmian jednocześnie.',
+  legend:[[COL.fib,'Włóknienie — tkanka bliznowata'],[COL.calc,'Zwapnienia'],[COL.wirs,'Nierówny przewód: zwężenia i poszerzenia']]},
+ {id:'cyst',title:'Torbiele i torbiele rzekome',short:'Zmiana wypełniona płynem',
+  variants:[['pseudo','Torbiel rzekoma'],['other','Inna zmiana torbielowata']],
+  change:{pseudo:'Obok trzustki powstał zbiornik płynu. Torbiel rzekoma tworzy się najczęściej po ostrym zapaleniu trzustki. Jest otoczona tkanką zapalną i bliznowatą, a nie własną wyściółką z komórek.',
+          other:'W trzustce widać małe przestrzenie wypełnione płynem. W odróżnieniu od torbieli rzekomej takie zmiany mają własną wyściółkę z komórek. Jest kilka ich rodzajów, różniących się budową i zachowaniem.'},
+  effect:{pseudo:'Mała torbiel rzekoma często nie zaburza pracy trzustki i może z czasem się zmniejszyć. Duża może uciskać żołądek lub dwunastnicę i utrudniać przechodzenie pokarmu.',
+          other:'Większość takich zmian nie zaburza pracy trzustki. Niektóre rodzaje wymagają okresowej kontroli w badaniach obrazowych, bo rzadko mogą się zmieniać.'},
+  symptoms:{pseudo:'Ból lub uczucie pełności w nadbrzuszu, szybka sytość, nudności. Mała torbiel często nie daje objawów.',
+          other:'Zwykle brak objawów — takie zmiany wykrywa się najczęściej przypadkiem, podczas badania obrazowego z innego powodu.'},
+  healthy:'Zdrowa trzustka nie zawiera przestrzeni wypełnionych płynem.',
+  note:'Torbiel nie oznacza raka. Większość zmian torbielowatych jest łagodna. To, czy zmianę trzeba kontrolować lub leczyć, ocenia lekarz na podstawie badań.',
+  legend:[[COL.cyst,'Płyn w torbieli'],[COL.cystWall,'Ściana torbieli rzekomej (tkanka włóknista)']]},
+ {id:'cancer',title:'Rak trzustki',short:'Guz — przykładowe położenie',
+  variants:[['head','Guz w głowie'],['body','Guz w trzonie'],['tail','Guz w ogonie']],
+  change:{head:'W głowie trzustki rośnie guz, czyli skupisko nieprawidłowych komórek. Na modelu pokazano przykładowe położenie i wielkość. Guz w głowie może uciskać przewód żółciowy, który przez nią przechodzi.',
+          body:'W trzonie trzustki rośnie guz, czyli skupisko nieprawidłowych komórek. Na modelu pokazano przykładowe położenie i wielkość. W tym miejscu guz zwykle nie uciska przewodu żółciowego.',
+          tail:'W ogonie trzustki rośnie guz, czyli skupisko nieprawidłowych komórek. Na modelu pokazano przykładowe położenie i wielkość. Ogon leży daleko od przewodu żółciowego.'},
+  effect:{head:'Uciśnięty przewód żółciowy przepuszcza mniej żółci do jelita. Żółć cofa się i jej barwnik przechodzi do krwi — może pojawić się żółtaczka. Ucisk przewodu trzustkowego może dodatkowo utrudniać trawienie.',
+          body:'Guz może zwężać przewód trzustkowy i utrudniać odpływ soku. Ponieważ nie uciska przewodu żółciowego, żółtaczka zdarza się tu rzadziej, a objawy mogą pojawić się później.',
+          tail:'Guz w ogonie długo nie zaburza odpływu żółci ani większości soku trzustkowego. Objawy mogą więc pojawić się późno.'},
+  symptoms:{head:'Zażółcenie skóry i białek oczu, ciemny mocz, jasne stolce, świąd skóry. Mogą też wystąpić ból brzucha lub pleców, brak apetytu i chudnięcie. Takie objawy mają również inne, częstsze przyczyny.',
+          body:'Ból w górnej części brzucha, często promieniujący do pleców, brak apetytu, niezamierzone chudnięcie. Takie objawy mają również inne, częstsze przyczyny.',
+          tail:'Ból w lewej górnej części brzucha lub pleców, brak apetytu, niezamierzone chudnięcie. Takie objawy mają również inne, częstsze przyczyny.'},
+  healthy:'W zdrowej trzustce przewód żółciowy przechodzący przez głowę jest drożny, a żółć swobodnie spływa do dwunastnicy.',
+  note:'Żaden z tych objawów nie przesądza o rozpoznaniu. Do rozpoznania potrzebne są badania obrazowe i zwykle badanie pobranej tkanki.',
+  legend:[[COL.tumor,'Guz (przykładowe położenie)'],[COL.bile,'Przewód żółciowy (poszerzony nad uciskiem)']]},
+ {id:'epi',title:'Niewydolność zewnątrzwydzielnicza',short:'Za mało enzymów w jelicie',
+  change:'Do jelita dociera za mało działających enzymów trawiennych. Przyczyną może być np. przewlekłe zapalenie trzustki, mukowiscydoza, operacja trzustki lub zablokowanie przewodu.',
+  effect:'Pokarm nie zostaje dokładnie rozłożony na małe cząstki. Najbardziej cierpi trawienie tłuszczów, więc organizm słabiej wchłania tłuszcze oraz witaminy A, D, E i K.',
+  symptoms:'Tłuste, jasne stolce o nieprzyjemnym zapachu, trudne do spłukania. Wzdęcia, biegunki, chudnięcie. Podobne objawy mogą mieć też inne choroby jelit.',
+  healthy:'Zdrowa trzustka wydziela w ciągu doby około 1–1,5 litra soku z enzymami, czyli znacznie więcej, niż potrzeba do strawienia posiłków.',
+  note:'Animacja jest schematem: pokazuje mniej enzymów i nierozłożony tłuszcz przesuwający się dalej w jelicie.',
+  legend:[[COL.enz,'Enzymy trawienne (tu: za mało)'],[COL.fat,'Nierozłożony tłuszcz'],[COL.food,'Pokarm']]},
+ {id:'diabetes',title:'Trzustka a cukrzyca',short:'Insulina i poziom cukru',
+  variants:[['t1','Typ 1'],['t2','Typ 2'],['t3c','Po chorobie trzustki']],
+  change:{t1:'Układ odpornościowy niszczy komórki beta w wyspach trzustkowych. Insuliny jest bardzo mało albo nie ma jej wcale.',
+          t2:'Trzustka wytwarza insulinę, ale komórki ciała słabiej na nią reagują (insulinooporność). Z czasem trzustka może też wytwarzać jej za mało.',
+          t3c:'Choroba lub operacja trzustki (np. przewlekłe zapalenie) niszczy tkankę razem z wyspami trzustkowymi. Taka cukrzyca często występuje razem z kłopotami z trawieniem.'},
+  effect:'Insulina działa jak klucz, który otwiera komórkom drogę dla glukozy. Gdy insuliny brakuje albo działa słabiej, glukoza zostaje we krwi i jej poziom rośnie.',
+  symptoms:'Wzmożone pragnienie, częste oddawanie moczu, zmęczenie, chudnięcie. Cukrzyca typu 2 przez długi czas może nie dawać żadnych objawów. Rozpoznanie stawia się na podstawie badań krwi.',
+  healthy:'W zdrowej trzustce insulina i glukagon na zmianę obniżają i podnoszą poziom glukozy, utrzymując go w bezpiecznym zakresie.',
+  note:'Ten moduł to schemat funkcjonalny. Wyspy na modelu 3D są pokazane jako powiększone kropki — w rzeczywistości są mikroskopijne.',
+  legend:[[COL.islet,'Wyspy trzustkowe (powiększone, schematycznie)'],[COL.isletBad,'Wyspy uszkodzone (przykład)'],[COL.ins,'Insulina'],[COL.glu,'Glukoza']]}
+];
+const scen=id=>SCEN.find(s=>s.id===id);
+const pick=(v,key)=>typeof v==='object'?v[key]:v;
+
+/* ======================= STAN PATOLOGII → MODEL ======================= */
+const pancHealthy=new THREE.Color(COL.panc),pancInfl=new THREE.Color(COL.inflam),pancFib=new THREE.Color(COL.fib),pancEpi=new THREE.Color(COL.epiPanc);
+const WHITE=new THREE.Color(0xffffff);
+function setPancColor(c){PANC_SEGS.forEach(s=>{PANC[s].mat.color.copy(c);PANC[s].cutMat.color.copy(c).lerp(WHITE,0.22);});}
+function setPancMap(t){PANC_SEGS.forEach(s=>{const m=PANC[s].mat;if(m.map!==t){m.map=t;m.bumpMap=t;m.needsUpdate=true;}const cm=PANC[s].cutMat,ct=t===TEX.fib?TEX.fib:TEX.cut;if(cm.map!==ct){cm.map=ct;cm.needsUpdate=true;}});}
+let extras={};
+function effectiveScenario(){return(state.mode==='disease'&&!state.showHealthy)?state.scenario:null;}
+function applyPathology(){
+  const id=effectiveScenario();const v=id?state.variant[id]:null;
+  let P={mul:1,lob:0.035,irreg:0},D={wirs:'normal',cbd:'normal'};let color=pancHealthy.clone(),map=TEX.lob;
+  extras={halo:0,stone:false,tumor:null,pseudo:false,other:false,calcs:false,islets:false,isletMode:'ok',gbScale:1};
+  if(id==='acute'){P.mul=1.08;color=pancHealthy.clone().lerp(pancInfl,0.85);extras.halo=0.3;extras.stone=true;}
+  if(id==='chronic'){P={mul:0.84,lob:0,irreg:0.11};D.wirs='beaded';color=pancHealthy.clone().lerp(pancFib,0.7);map=TEX.fib;extras.calcs=true;}
+  if(id==='cyst'){if(v==='pseudo'){extras.pseudo=true;color=pancHealthy.clone().lerp(pancFib,0.15);}else extras.other=true;}
+  if(id==='cancer'){extras.tumor=v;if(v==='head'){D.cbd='jaundice';D.wirs='headBlock';extras.gbScale=1.28;}else if(v==='body'){D.wirs='bodyBlock';}}
+  if(id==='epi'){P.mul=0.9;color=pancHealthy.clone().lerp(pancEpi,0.7);D.wirs='thin';}
+  if(id==='diabetes'){extras.islets=true;extras.isletMode=v;if(v==='t3c'){P={mul:0.86,lob:0,irreg:0.09};color=pancHealthy.clone().lerp(pancFib,0.6);map=TEX.fib;D.wirs='beaded';}}
+  buildPancreas(P);buildDucts(D);setPancColor(color);setPancMap(map);
+  haloMat.opacity=extras.halo;
+  bileMat.color.setHex(D.cbd==='jaundice'?0xA7C21E:COL.bile);
+  gall.scale.setScalar(extras.gbScale);
+  if(extras.tumor){const T=TUMOR_POS[extras.tumor];tumor.position.set(...T.p);tumor.scale.set(...T.s);}
+  if(extras.stone)stone.position.copy(PAPILLA).add(V(0.06,0.06,0));
+  islets.forEach(i=>{let bad=false;if(extras.isletMode==='t1')bad=i.bad<0.82;else if(extras.isletMode==='t3c')bad=i.bad<0.55;i.m.material=bad?isletMatBad:isletMatOK;});
+  refreshVisibility();
+}
+
+/* ======================= WIDOCZNOŚĆ / TRYBY WIDOKU ======================= */
+function animNeeds(){const a=state.anim;return a?a.type:null;}
+function refreshVisibility(){
+  const sec=state.view==='section',tr=state.view==='transparent',O=state.organs,a=animNeeds();
+  const flowAnim=a==='digest'||a==='epi'||a==='acute';const sugarAnim=a==='sugar';
+  PANC_SEGS.forEach(s=>{const p=PANC[s];p.full.visible=!sec;p.half.visible=sec;p.cut.visible=sec;
+    [p.mat].forEach(m=>{m.transparent=tr;m.opacity=tr?0.3:1;m.depthWrite=!tr;m.needsUpdate=true;});
+    p.full.renderOrder=tr?5:0;});
+  duoFull.visible=O.duodenum&&!sec;duoHalf.visible=O.duodenum&&sec;
+  duoMat.transparent=tr;duoMat.opacity=tr?0.32:1;duoMat.depthWrite=!tr;duoMat.needsUpdate=true;duoFull.renderOrder=tr?5:0;
+  stomach.visible=eso.visible=O.stomach;
+  STRUCT.spleen.meshes.forEach(m=>m.visible=O.spleen);
+  gall.visible=O.gallbladder;
+  const showVeins=O.veins||sugarAnim;veinA.visible=veinB.visible=showVeins;
+  [wirsMat,bileMat,hepMat].forEach(m=>{m.transparent=flowAnim;m.opacity=flowAnim?0.42:1;m.depthWrite=!flowAnim;m.needsUpdate=true;});
+  halo.forEach(m=>m.visible=extras.halo>0);
+  stone.visible=!!extras.stone||(a==='acute');
+  tumor.visible=!!extras.tumor;
+  pseudo.visible=pseudoWall.visible=!!extras.pseudo;
+  otherCysts.forEach(m=>m.visible=!!extras.other);
+  calcs.forEach(m=>m.visible=!!extras.calcs);
+  islets.forEach(i=>i.m.visible=!!extras.islets||sugarAnim);
+  rebuildLabels();
+}
+function setView(v){state.view=v;document.querySelectorAll('[data-view]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.view===v));refreshVisibility();}
+
+/* ======================= ZAZNACZANIE ======================= */
+const accentCol=new THREE.Color(0x1A9FD0);
+function applyHighlight(){
+  allMeshes.forEach(m=>{const sid=m.userData.sid;if(!sid||!m.material.emissive)return;const on=sid===state.selected;
+    if(!m.material.userData.base){m.material.userData.base={e:m.material.emissive.getHex(),i:m.material.emissiveIntensity};}
+    if(on){m.material.emissive.copy(accentCol);m.material.emissiveIntensity=0.42;}
+    else if(!sharedSelected(m.material)){m.material.emissive.setHex(m.material.userData.base.e);m.material.emissiveIntensity=m.material.userData.base.i;}});
+}
+function sharedSelected(material){return state.selected&&(STRUCT[state.selected].meshes||[]).some(mm=>mm.material===material);}
+function select(sid,fly){
+  state.selected=sid;applyHighlight();renderDock();updateLabelSel();
+  if(state.mode==='build')renderPanel();
+  if(sid&&fly){const a=V(...STRUCT[sid].anchor);const dir=camera.position.clone().sub(controls.target).normalize();flyTo(a.clone().addScaledVector(dir,9.5),a.clone());}
+}
+
+/* ======================= KAMERA ======================= */
+const HOME_T=V(0.55,1.45,0);
+function homePos(){const asp=Math.max(0.3,camera.aspect);const d=Math.max(19,15.5/(2*Math.tan(THREE.MathUtils.degToRad(17.5))*asp));return HOME_T.clone().add(V(0.15,0.35,d));}
+let tween=null;
+function flyTo(pos,target,dur){tween={p0:camera.position.clone(),q0:controls.target.clone(),p1:pos,q1:target,s:0,d:REDUCED?0.001:(dur||0.9)};}
+function resetView(){flyTo(homePos(),HOME_T.clone());}
+
+/* ======================= PODPISY ======================= */
+const labelsEl=$('#labels'),leaders=$('#leaders');const SVGNS='http://www.w3.org/2000/svg';
+let LBL=[];
+function rebuildLabels(){
+  labelsEl.innerHTML='';leaders.innerHTML='';LBL=[];if(!state.labels)return;
+  const items=[];const O=state.organs,a=animNeeds();
+  const pushS=sid=>{const S=STRUCT[sid];items.push({id:sid,text:S.short||S.name,anchor:V(...S.anchor),col:S.col,sid});};
+  ['head','uncinate','neck','body','tail','wirsung','cbd','papilla'].forEach(pushS);
+  ['duodenum','stomach','spleen','gallbladder'].forEach(s=>{if(O[s])pushS(s);});
+  if(O.veins||a==='sugar')pushS('veins');
+  const id=effectiveScenario();
+  if(extras.tumor)items.push({id:'x1',text:'Guz (przykład)',anchor:tumor.position.clone().add(V(0,0,0.45)),col:COL.tumor,ex:true});
+  if(extras.tumor==='head')items.push({id:'x2',text:'Poszerzony przewód żółciowy',anchor:V(-2.78,1.7,-0.34),col:COL.bile,ex:true});
+  if(extras.pseudo)items.push({id:'x3',text:'Torbiel rzekoma (przykład)',anchor:pseudo.position.clone().add(V(0.2,0.3,0.4)),col:COL.cyst,ex:true});
+  if(extras.other)items.push({id:'x4',text:'Zmiana torbielowata (przykład)',anchor:V(0.3,1.2,0.48),col:COL.cyst,ex:true});
+  if(extras.stone||a==='acute')items.push({id:'x5',text:'Kamień żółciowy',anchor:stone.position,col:COL.stone,ex:true,live:true});
+  if(extras.halo>0&&id==='acute')items.push({id:'x6',text:'Obrzęk i stan zapalny (przykład)',anchor:V(1.1,1.75,0.55),col:COL.inflam,ex:true});
+  if(extras.calcs)items.push({id:'x7',text:'Zwapnienia (przykład)',anchor:calcs[14].position,col:COL.calc,ex:true});
+  if(extras.islets||a==='sugar')items.push({id:'x8',text:'Wyspy trzustkowe (powiększone)',anchor:islets[3].p,col:COL.islet,ex:true});
+  items.forEach(it=>{const d=document.createElement('div');d.className='lbl'+(it.ex?' ex':'');d.innerHTML=`<i style="background:${hex(it.col)}"></i>${it.text}`;
+    if(it.sid){d.addEventListener('click',e=>{e.stopPropagation();select(it.sid===state.selected?null:it.sid,false);});}
+    labelsEl.appendChild(d);
+    const ln=document.createElementNS(SVGNS,'line');ln.setAttribute('stroke','#4A6067');ln.setAttribute('stroke-width','1.4');ln.setAttribute('stroke-opacity','0.75');
+    const dot=document.createElementNS(SVGNS,'circle');dot.setAttribute('r','3.6');dot.setAttribute('fill',hex(it.col));dot.setAttribute('stroke','#14303A');dot.setAttribute('stroke-width','1.2');
+    leaders.appendChild(ln);leaders.appendChild(dot);
+    LBL.push(Object.assign(it,{el:d,ln,dot,w:0,h:0}));});
+  requestAnimationFrame(()=>{LBL.forEach(l=>{l.w=l.el.offsetWidth;l.h=l.el.offsetHeight;});updateLabelSel();});
+}
+function updateLabelSel(){LBL.forEach(l=>l.el.classList.toggle('sel',!!l.sid&&l.sid===state.selected));}
+const tmpV=new THREE.Vector3(),pivV=new THREE.Vector3();
+function layoutLabels(W,H){
+  if(!LBL.length)return;
+  const top=$('.toolbar').offsetHeight+18,bottom=H-$('#dock').offsetHeight-18;
+  const L=[],R=[];
+  LBL.forEach(l=>{pivV.set(-0.5,l.anchor.y,l.anchor.z).project(camera);const px=(pivV.x*0.5+0.5)*W;tmpV.copy(l.anchor).project(camera);const vis=tmpV.z<1&&tmpV.z>-1;l.sx=(tmpV.x*0.5+0.5)*W;l.sy=(-tmpV.y*0.5+0.5)*H;l.vis=vis;if(!vis)return;(l.sx<px?L:R).push(l);});
+  const gap=5;
+  [L,R].forEach((col,ci)=>{col.sort((a,b)=>a.sy-b.sy);let y=top;col.forEach(l=>{l.y=Math.max(l.sy-l.h/2,y);y=l.y+l.h+gap;});
+    let lim=bottom;for(let i=col.length-1;i>=0;i--){const l=col[i];if(l.y+l.h>lim)l.y=lim-l.h;lim=l.y-gap;}
+    col.forEach(l=>{l.x=ci===0?10:W-10-l.w;});});
+  LBL.forEach(l=>{if(!l.vis){l.el.style.visibility='hidden';l.ln.setAttribute('visibility','hidden');l.dot.setAttribute('visibility','hidden');return;}
+    l.el.style.visibility='visible';l.ln.setAttribute('visibility','visible');l.dot.setAttribute('visibility','visible');
+    l.el.style.transform=`translate(${l.x.toFixed(1)}px,${l.y.toFixed(1)}px)`;
+    const ex=l.x<W/2?l.x+l.w:l.x,ey=l.y+l.h/2;
+    l.ln.setAttribute('x1',ex.toFixed(1));l.ln.setAttribute('y1',ey.toFixed(1));l.ln.setAttribute('x2',l.sx.toFixed(1));l.ln.setAttribute('y2',l.sy.toFixed(1));
+    l.dot.setAttribute('cx',l.sx.toFixed(1));l.dot.setAttribute('cy',l.sy.toFixed(1));});
+}
+
+/* ======================= KOMPAS ======================= */
+const compass=$('#compass'),viewName=$('#viewName');let lastCompass='';
+function updateCompass(){
+  camera.updateMatrixWorld();const m=camera.matrixWorldInverse;
+  const ax=[[V(1,0,0),'L','P',true],[V(0,1,0),'G','S',false],[V(0,0,1),'Pr','T',false]];const it=[];
+  ax.forEach(a=>{const d=a[0].clone().transformDirection(m);it.push({x:d.x,y:-d.y,z:d.z,t:a[1],k:a[3]});it.push({x:-d.x,y:d.y,z:-d.z,t:a[2],k:a[3]});});
+  it.sort((a,b)=>a.z-b.z);
+  let s='<circle cx="48" cy="48" r="45" fill="#F4F8F8" stroke="#CFDCDF"/>';
+  it.forEach(p=>{const L=Math.hypot(p.x,p.y);const R=31;const x=48+p.x*R,y=48+p.y*R;const op=(0.45+0.55*clamp((p.z+1)/2,0,1)).toFixed(2);
+    s+=`<line x1="48" y1="48" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${p.k?'#1A6A82':'#7D9399'}" stroke-width="${p.k?2.6:1.8}" opacity="${op}"/>`;
+    if(L>0.18)s+=`<g opacity="${op}"><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${p.t.length>1?11:10}" fill="${p.k?'#1A6A82':'#FFFFFF'}" stroke="${p.k?'#1A6A82':'#7D9399'}" stroke-width="1.5"/><text x="${x.toFixed(1)}" y="${(y+4.3).toFixed(1)}" text-anchor="middle" font-size="${p.t.length>1?10.5:12.5}" font-weight="700" font-family="Atkinson Hyperlegible Next, sans-serif" fill="${p.k?'#fff':'#14303A'}">${p.t}</text></g>`;});
+  if(s!==lastCompass){compass.innerHTML=s;lastCompass=s;}
+  const d=camera.position.clone().sub(controls.target).normalize();const a=[Math.abs(d.x),Math.abs(d.y),Math.abs(d.z)];const i=a.indexOf(Math.max(...a));
+  const nm=i===2?(d.z>0?'Widok od przodu':'Widok od tyłu'):i===1?(d.y>0?'Widok od góry':'Widok od dołu'):(d.x>0?'Widok z lewego boku':'Widok z prawego boku');
+  if(viewName.textContent!==nm)viewName.textContent=nm;
+}
+
+/* ======================= CZĄSTKI I ANIMACJE ======================= */
+function mkPath(parts){let total=0;const P=parts.map(p=>{const L=p.c.getLength()*Math.abs(p.b-p.a);total+=L;return Object.assign({L},p);});
+  return{total,parts:P,at(s,out){let d=clamp(s,0,1)*total;for(let i=0;i<P.length;i++){const p=P[i];if(d<=p.L||i===P.length-1){const f=p.L>0?Math.min(1,d/p.L):1;p.c.getPointAt(clamp(p.a+(p.b-p.a)*f,0,1),out);return i;}d-=p.L;}return 0;}};}
+const pGeo=new THREE.SphereGeometry(1,12,9);
+const pMat={};['enz','food','fat','bile','ins','glc','glu','enzHot'].forEach(k=>{const c=k==='enzHot'?0xE2553A:COL[k];pMat[k]=mat(c,{emissive:c,emissiveIntensity:k==='glu'?0.55:0.4,roughness:0.35});});
+pMat.glu.emissive.setHex(0xbfbfbf);
+let parts=[];
+function spawn(kind,path,o){o=o||{};const m=new THREE.Mesh(pGeo,pMat[kind]);m.scale.setScalar(o.size||0.065);m.renderOrder=2;scene.add(m);
+  const p={m,kind,path,s:o.s0||0,v:o.v||1.2,off:o.off||new THREE.Vector3(),offFrom:o.offFrom==null?99:o.offFrom,stopAt:o.stopAt||1,size:o.size||0.065,meta:o.meta||{}};parts.push(p);return p;}
+function clearParts(){parts.forEach(p=>scene.remove(p.m));parts=[];}
+function rndOff(r,R){const v=new THREE.Vector3(R()-0.5,R()-0.5,R()-0.5);return v.normalize().multiplyScalar(r*Math.sqrt(R()));}
+const R=mulberry(77);
+
+const ANIMS={
+ digest:{title:'Trawienie',dur:20,steps:['Pokarm z żołądka przechodzi do dwunastnicy.','Trzustka wytwarza sok z enzymami. Drobne przewodziki zbierają go do przewodu Wirsunga.','Sok trzustkowy i żółć wypływają razem przez brodawkę do dwunastnicy.','W jelicie enzymy rozkładają tłuszcze, białka i węglowodany na drobne cząstki, które mogą się wchłonąć.'],loop:true},
+ epi:{title:'Niewydolność — przepływ',dur:20,steps:['Pokarm, w tym tłuszcz, przechodzi z żołądka do dwunastnicy.','Do jelita dociera za mało działających enzymów.','Tłuszcz nie zostaje dobrze rozłożony i przesuwa się dalej w niezmienionej postaci.','Nierozłożony tłuszcz trafia do stolca — stąd tłuste stolce i słabsze wchłanianie witamin.'],loop:true},
+ sugar:{title:'Regulacja cukru we krwi',dur:22,steps:['Po posiłku glukoza (cukier) z jelit trafia do krwi i jej poziom rośnie.','Komórki beta wysp trzustkowych wydzielają insulinę prosto do krwi.','Insulina pomaga glukozie przejść z krwi do komórek ciała i do wątroby. Poziom cukru spada do normy.','Między posiłkami poziom cukru we krwi się obniża.','Komórki alfa wysp wydzielają do krwi glukagon.','Glukagon sprawia, że wątroba uwalnia zapasy glukozy. Poziom cukru wraca do normy.'],loop:true},
+ acute:{title:'Kamień żółciowy a zapalenie',dur:13,steps:['Kamień (złóg) z pęcherzyka żółciowego może przesunąć się do przewodu żółciowego.','Jeśli utknie w okolicy ujścia przewodów, może utrudnić odpływ soku trzustkowego.','Sok trzustkowy zalega w przewodzie. Enzymy mogą uaktywnić się za wcześnie i podrażniać trzustkę.','Pojawia się obrzęk i stan zapalny trzustki. To jeden z możliwych mechanizmów — nie u każdego kamienie wywołują zapalenie.'],loop:false}
+};
+let sugarLevel=0.5;
+const stonePath=mkPath([{c:new THREE.LineCurve3(gbCenter.clone(),C.gb.getPointAt(1)),a:0,b:1},{c:C.cystic,a:0,b:1},{c:C.cbd,a:0,b:0.985}]);
+function startAnim(type){
+  stopAnim(true);
+  state.anim={type,t:0,acc:{},paused:false,step:0,done:false};
+  if(type==='acute'){buildPancreas({mul:1,lob:0.035,irreg:0});setPancColor(pancHealthy);haloMat.opacity=0;extras.halo=0;extras.stone=false;}
+  setView('transparent');refreshVisibility();renderDock();renderPanel();
+}
+function stopAnim(silent){
+  const was=state.anim;state.anim=null;clearParts();
+  if(was&&was.type==='acute')applyPathology();else refreshVisibility();
+  if(!silent){renderDock();renderPanel();}
+}
+function every(a,key,interval,dt,fn){a.acc[key]=(a.acc[key]||0)+dt;while(a.acc[key]>=interval){a.acc[key]-=interval;fn();}}
+const tmpP=new THREE.Vector3();
+function tickAnim(dt){
+  const a=state.anim;if(!a||a.paused)return;
+  a.t+=dt;const A=ANIMS[a.type];let T=a.t;
+  if(A.loop)T=a.t%A.dur;else if(a.t>A.dur){T=A.dur;}
+  const nSteps=A.steps.length;
+  let step;
+  if(a.type==='acute'){step=T<3.2?0:T<6.4?1:T<9.2?2:3;}
+  else step=Math.min(nSteps-1,Math.floor(T/(A.dur/nSteps)));
+  if(step!==a.step){a.step=step;renderDock();highlightSteps();}
+  if(a.type==='digest'||a.type==='epi'){
+    const epi=a.type==='epi';
+    every(a,'food',epi?0.32:0.26,dt,()=>spawn(epi?'fat':'food',mkPath([{c:C.duo,a:0,b:0.985}]),{v:0.95,size:epi?0.085:0.075,off:rndOff(0.24,R),offFrom:0,meta:{food:true}}));
+    if(T>3.5||a.t>A.dur){every(a,'enz',epi?0.75:0.11,dt,()=>{const u=R()*0.82;spawn('enz',mkPath([{c:C.wirs,a:u,b:1},{c:C.duo,a:duoP,b:0.985}]),{v:1.35,size:0.06,off:rndOff(0.24,R),offFrom:1});});
+      every(a,'bile',0.3,dt,()=>spawn('bile',mkPath([{c:C.cystic,a:0,b:1},{c:C.cbd,a:0,b:1},{c:C.duo,a:duoP,b:0.985}]),{v:1.3,size:0.06,off:rndOff(0.24,R),offFrom:2}));}
+  }
+  if(a.type==='sugar'){
+    const phaseA=T<A.dur/2;const local=phaseA?T/(A.dur/2):(T-A.dur/2)/(A.dur/2);
+    sugarLevel=phaseA?0.5+0.32*Math.sin(Math.PI*Math.min(1,local*1.15)):0.5-0.2*Math.sin(Math.PI*Math.min(1,local*1.15));
+    every(a,'glu',phaseA&&local<0.6?0.12:0.55,dt,()=>spawn('glu',mkPath([{c:C.smv,a:0,b:1},{c:C.vein,a:veinConf,b:1}]),{v:1.25,size:0.05,off:rndOff(0.06,R),offFrom:0}));
+    every(a,'ins',phaseA&&local>0.25?0.09:1.2,dt,()=>{const i=islets[(R()*islets.length)|0];spawn('ins',mkPath([{c:new THREE.LineCurve3(i.p.clone(),C.vein.getPointAt(i.u)),a:0,b:1},{c:C.vein,a:i.u,b:1}]),{v:1.05,size:0.05});});
+    every(a,'glc',!phaseA&&local>0.2?0.1:1.4,dt,()=>{const i=islets[(R()*islets.length)|0];spawn('glc',mkPath([{c:new THREE.LineCurve3(i.p.clone(),C.vein.getPointAt(i.u)),a:0,b:1},{c:C.vein,a:i.u,b:1}]),{v:1.05,size:0.05});});
+    updateGauge();
+  }
+  if(a.type==='acute'){
+    const s=clamp(T/5.8,0,1);stonePath.at(smooth(s)*0.999,tmpP);stone.position.copy(tmpP);stone.visible=true;
+    if(T>5.8&&T<9.2)every(a,'enz',0.09,dt,()=>{const u=R()*0.75;spawn('enz',mkPath([{c:C.wirs,a:u,b:0.97}]),{v:0.9,size:0.065,meta:{stick:true}});});
+    const f=smooth((T-8.6)/3.2);
+    setPancColor(pancHealthy.clone().lerp(pancInfl,0.85*f));haloMat.opacity=0.3*f;
+    halo.forEach(m=>m.visible=f>0);
+    if(f>0.98&&!a.done){a.done=true;buildPancreas({mul:1.08,lob:0.035,irreg:0});extras.halo=0.3;extras.stone=true;}
+    parts.forEach(p=>{if(p.s>=0.995&&p.m.material!==pMat.enzHot&&T>8)p.m.material=pMat.enzHot;});
+  }
+  // ruch cząstek
+  for(let i=parts.length-1;i>=0;i--){const p=parts[i];p.s+=p.v*dt/p.path.total;
+    if(p.s>=1){if(p.meta.stick){p.s=1;}else{scene.remove(p.m);parts.splice(i,1);continue;}}
+    const idx=p.path.at(p.s,tmpP);p.m.position.copy(tmpP);if(idx>=p.offFrom)p.m.position.add(p.off);
+    if(p.meta.food&&p.kind==='food'){const k=smooth((p.s-duoP-0.03)/0.25);p.m.scale.setScalar(p.size*(1-0.55*k));}
+  }
+}
+
+/* ======================= DOK ======================= */
+const dockMain=$('#dockMain');
+function renderDock(){
+  const a=state.anim;
+  if(a){const A=ANIMS[a.type];const n=A.steps.length;
+    dockMain.innerHTML=`<div class="row"><span class="cap-step">${A.title} · krok ${a.step+1} z ${n}</span><span class="cap-dots">${A.steps.map((_,i)=>`<span class="${i===a.step?'on':''}"></span>`).join('')}</span>
+      <span style="margin-left:auto;display:flex;gap:6px"><button class="mini" data-dock="pause">${a.paused?'Wznów':'Pauza'}</button>${A.loop?'':'<button class="mini" data-dock="replay">Od nowa</button>'}<button class="mini" data-dock="stop">Zakończ</button></span></div>
+      <p class="cap-text">${A.steps[a.step]}</p>`;
+    return;}
+  if(state.selected){const S=STRUCT[state.selected];
+    dockMain.innerHTML=`<div class="row"><div class="t"><i style="width:12px;height:12px;border-radius:3px;background:${hex(S.col)}"></i>${S.name}</div><button class="x" data-dock="unsel" aria-label="Zamknij opis">✕</button></div><p>${S.desc}</p>`;return;}
+  dockMain.innerHTML=`<p class="hint"><b>Przeciągnij</b>, aby obracać · <b>kółko myszy</b> lub <b>dwa palce</b>, aby przybliżać · <b>kliknij część modelu</b> lub podpis, aby zobaczyć opis.</p>`;
+}
+dockMain.addEventListener('click',e=>{const b=e.target.closest('[data-dock]');if(!b)return;const k=b.dataset.dock;
+  if(k==='unsel')select(null);if(k==='stop')stopAnim();if(k==='pause'&&state.anim){state.anim.paused=!state.anim.paused;renderDock();}
+  if(k==='replay'&&state.anim)startAnim(state.anim.type);});
+
+/* ======================= PANEL ======================= */
+const panel=$('#panel');
+const ICON_PLAY='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l12.5-7.5z"/></svg>';
+const ICON_ZOOM='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 21 21M10.5 7.5v6M7.5 10.5h6"/></svg>';
+function chip(sid){const S=STRUCT[sid];return`<button class="chip" data-act="select" data-sid="${sid}" aria-pressed="${state.selected===sid}"><i style="background:${hex(S.col)}"></i>${S.short||S.name}</button>`;}
+function legendHTML(items,extraNote){return`<div class="legend"><h3>Legenda</h3><ul>${items.map(i=>`<li><span class="sw" style="background:${hex(i[0])}"></span>${i[1]}</li>`).join('')}</ul><p class="note">${extraNote||'Kolory są umowne (schematyczne). Nie odpowiadają temu, jak zmiany wyglądają w badaniach lub podczas operacji.'}</p></div>`;}
+const BASE_LEG=[[COL.panc,'Trzustka'],[COL.wirs,'Przewód trzustkowy — sok trawienny'],[COL.bile,'Przewody żółciowe — żółć']];
+
+function renderPanel(){
+  const m=state.mode;let h='';
+  if(m==='build'){
+    const S=state.selected?STRUCT[state.selected]:null;
+    h=`<div><p class="eyebrow">Budowa</p><h2>Gdzie leży trzustka i z czego się składa</h2></div>
+    <p class="lead">Trzustka ma około 12–15 cm długości. Leży głęboko w górnej części brzucha, za żołądkiem. Ma dwa zadania: wytwarza sok trawienny i hormony regulujące poziom cukru we krwi.</p>
+    <div class="card ${S?'sel':''}">${S?`<p class="eyebrow">Wybrana część</p><h3>${S.name}</h3><p>${S.desc}</p>`:`<h3>Kliknij część modelu</h3><p class="muted">Albo wybierz ją z listy poniżej. Wybrana część podświetli się na modelu, a tu pojawi się jej opis.</p>`}</div>
+    <div><h3>Części trzustki</h3><div class="chips">${['head','neck','body','tail','uncinate'].map(chip).join('')}</div></div>
+    <div><h3>Przewody i ich ujście</h3><div class="chips">${['wirsung','cbd','papilla','hepatic'].map(chip).join('')}</div></div>
+    <div><h3>Narządy sąsiednie</h3><div class="chips">${['duodenum','stomach','spleen','gallbladder','veins'].map(chip).join('')}</div>
+      <p class="small muted" style="margin-top:6px">Wątroby nie pokazano, aby nie zasłaniała trzustki. Narządy można ukryć przyciskiem „Narządy sąsiednie” nad modelem.</p></div>
+    <button class="secondary" data-act="micro">${ICON_ZOOM}Powiększenie: zraziki i wyspy trzustkowe</button>
+    <div class="card"><h3 style="font-family:var(--f-body);font-size:17px">Jak czytać model</h3>
+      <p class="small">Patrzysz na pacjenta od przodu, więc <b>prawa strona pacjenta jest po lewej stronie ekranu</b>. Kompas w prawym dolnym rogu pokazuje strony ciała przy każdym obrocie.</p>
+      <p class="small" style="margin-top:6px"><b>Przekrój</b> odsłania wnętrze trzustki i dwunastnicy z przewodami. <b>Przezroczysty</b> pokazuje przewody przez tkankę.</p></div>`;
+  }
+  else if(m==='func'){
+    const a=state.anim&&(state.anim.type==='digest'||state.anim.type==='sugar')?state.anim.type:null;
+    h=`<div><p class="eyebrow">Funkcje</p><h2>Dwie drogi wydzielania</h2></div>
+    <p class="lead">Trzustka wysyła swoje produkty dwiema zupełnie oddzielnymi drogami.</p>
+    <div class="lanes">
+      <div class="lane a"><span class="tag">Droga 1 · do jelita</span><h3>Sok trawienny</h3>
+        <ul class="flow" style="color:#16708F"><li>komórki zrazikowe</li><li>drobne przewodziki</li><li>przewód Wirsunga</li><li>brodawka → dwunastnica</li></ul>
+        <small>Około 1–1,5 l soku na dobę. Nazwa fachowa: wydzielanie zewnętrzne.</small></div>
+      <div class="lane b"><span class="tag">Droga 2 · do krwi</span><h3>Hormony</h3>
+        <ul class="flow" style="color:#4B48A8"><li>wyspy trzustkowe</li><li>naczynia włosowate</li><li>żyły → wątroba</li><li>krew → całe ciało</li></ul>
+        <small>Insulina i glukagon. Nie płyną przewodem trzustkowym. Nazwa fachowa: wydzielanie wewnętrzne.</small></div>
+    </div>
+    <div class="btnrow">
+      <button class="${a==='digest'?'secondary':'primary'}" data-act="anim" data-anim="digest" ${a==='digest'?'aria-pressed="true"':''}>${ICON_PLAY}Trawienie</button>
+      <button class="${a==='sugar'?'secondary':'primary'}" data-act="anim" data-anim="sugar" ${a==='sugar'?'aria-pressed="true"':''}>${ICON_PLAY}Regulacja cukru we krwi</button>
+    </div>
+    ${a==='digest'?digestSchem():''}
+    ${a==='sugar'?sugarSchem():''}
+    ${a?`<div><h3>Kolejne kroki</h3><ol class="steps">${ANIMS[a].steps.map((s,i)=>`<li class="${i===state.anim.step?'on':''}">${s}</li>`).join('')}</ol></div>`:'<p class="muted small">Wybierz animację. Model przełączy się na widok przezroczysty, aby było widać, co płynie przewodami i naczyniami.</p>'}
+    ${legendHTML(a==='sugar'?[[COL.islet,'Wyspy trzustkowe (powiększone kropki)'],[COL.vein,'Naczynie krwionośne (żyły)'],[COL.glu,'Glukoza (cukier)'],[COL.ins,'Insulina'],[COL.glc,'Glukagon']]:[...BASE_LEG,[COL.enz,'Enzymy w soku trzustkowym'],[COL.bile,'Żółć'],[COL.food,'Pokarm']],'Kolory i kropki są umowne. Wyspy i cząsteczki pokazano w ogromnym powiększeniu.')}`;
+  }
+  else if(m==='disease'){
+    const id=state.scenario,S=id?scen(id):null,v=id?state.variant[id]:null;
+    h=`<div><p class="eyebrow">Choroby i zaburzenia</p><h2>${S?S.title:'Wybierz temat'}</h2></div>
+    <div class="scen-grid">${SCEN.map(s=>`<button class="scen" data-act="scen" data-id="${s.id}" aria-pressed="${s.id===id}"><b>${s.title}</b><span>${s.short}</span></button>`).join('')}</div>`;
+    if(!S){h+=`<p class="muted">Każdy temat to osobny, ilustracyjny przykład. Choroby te nie są kolejnymi etapami jednej drogi — większość osób nie przechodzi od jednej do drugiej.</p>`;}
+    else{
+      h+=`<span class="badge">Przykład ilustracyjny</span>
+      ${S.variants?`<div class="chips">${S.variants.map(x=>`<button class="chip" data-act="variant" data-v="${x[0]}" aria-pressed="${x[0]===v}">${x[1]}</button>`).join('')}</div>`:''}
+      <div class="seg" role="group" aria-label="Porównanie" style="align-self:flex-start">
+        <button data-act="healthy" data-h="0" aria-pressed="${!state.showHealthy}">${id==='diabetes'?'Zaburzenie':'Zmiana (przykład)'}</button>
+        <button data-act="healthy" data-h="1" aria-pressed="${state.showHealthy}">Zdrowa trzustka</button></div>
+      ${id==='acute'?`<button class="primary" data-act="anim" data-anim="acute">${ICON_PLAY}Animacja: kamień żółciowy a zapalenie</button>`:''}
+      ${id==='epi'?`<button class="primary" data-act="anim" data-anim="epi">${ICON_PLAY}Animacja: trawienie przy niedoborze enzymów</button>`:''}
+      ${id==='epi'?epiSchem():''}
+      ${id==='diabetes'?diabetesSchem(v):''}
+      ${id==='cancer'&&v==='head'?jaundiceSchem():''}
+      <div class="qa">
+        <section><h3>Co się zmienia?</h3><p>${pick(S.change,v)}</p></section>
+        <section><h3>Jak wpływa to na działanie narządu?</h3><p>${pick(S.effect,v)}</p></section>
+        <section><h3>Jakie objawy mogą wystąpić?</h3><p>${pick(S.symptoms,v)}</p></section>
+      </div>
+      <div class="cmp"><h3>Dla porównania: zdrowa trzustka</h3><p>${S.healthy}</p></div>
+      <p class="small" style="font-weight:600">${S.note}</p>
+      ${legendHTML([...BASE_LEG,...S.legend.filter(l=>!(id==='cyst'&&v==='other'&&l[0]===COL.cystWall)&&!(id==='cancer'&&v!=='head'&&l[0]===COL.bile)&&!(id==='diabetes'&&v==='t2'&&l[0]===COL.isletBad))])}`;
+    }
+    h+=`<p class="caution">Te same objawy mogą mieć różne przyczyny. O rozpoznaniu decyduje lekarz na podstawie badania i badań dodatkowych, a nie samych objawów.</p>`;
+  }
+  else if(m==='healthy'){
+    h=`<div><p class="eyebrow">Zdrowa trzustka</p><h2>Tak wygląda i pracuje zdrowy narząd</h2></div>
+    <p class="lead">Zdrowa trzustka jest miękka, ma zrazikową budowę i gładki, cienki przewód. Leży spokojnie za żołądkiem, a jej głowa mieści się w zakolu dwunastnicy.</p>
+    <div class="facts">
+      <div class="fact"><b>12–15 cm</b><span>długość</span></div>
+      <div class="fact"><b>70–100 g</b><span>przybliżona masa</span></div>
+      <div class="fact"><b>1–1,5 l</b><span>soku trawiennego na dobę</span></div>
+      <div class="fact"><b>1–2%</b><span>masy to wyspy wytwarzające hormony</span></div>
+    </div>
+    <div class="lanes">
+      <div class="lane a"><span class="tag">Do jelita</span><h3>Trawienie</h3><small style="font-size:14.5px;color:var(--ink)">Enzymy rozkładają tłuszcze, białka i węglowodany.</small></div>
+      <div class="lane b"><span class="tag">Do krwi</span><h3>Cukier we krwi</h3><small style="font-size:14.5px;color:var(--ink)">Insulina obniża, a glukagon podnosi poziom glukozy.</small></div>
+    </div>
+    <div class="btnrow"><button class="secondary" data-act="goto" data-m="func">${ICON_PLAY}Zobacz animacje funkcji</button><button class="secondary" data-act="goto" data-m="disease">Porównaj z chorobami</button></div>
+    ${legendHTML(BASE_LEG.concat([[COL.duo,'Dwunastnica'],[COL.stom,'Żołądek (półprzezroczysty)'],[COL.spleen,'Śledziona'],[COL.gb,'Pęcherzyk żółciowy']]),'Kolory narządów są uproszczone, aby łatwo je odróżnić.')}`;
+  }
+  h+=`<p class="caution">Treści medyczne przygotowano do weryfikacji. Przed użyciem z pacjentami powinien je sprawdzić i zatwierdzić lekarz.</p>`;
+  panel.innerHTML=h;
+}
+function highlightSteps(){const a=state.anim;if(!a)return;panel.querySelectorAll('.steps li').forEach((li,i)=>li.classList.toggle('on',i===a.step));}
+panel.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b)return;const k=b.dataset.act;
+  if(k==='select'){const sid=b.dataset.sid;if(sid==='veins'&&!state.organs.veins){state.organs.veins=true;renderOrganPop();refreshVisibility();}
+    if(STRUCT[sid].organ&&sid!=='veins'&&!state.organs[sid]){state.organs[sid]=true;renderOrganPop();refreshVisibility();}
+    select(state.selected===sid?null:sid,state.selected!==sid);}
+  if(k==='micro')openMicro();
+  if(k==='anim'){if(state.anim&&state.anim.type===b.dataset.anim&&b.dataset.anim!=='acute')stopAnim();else startAnim(b.dataset.anim);}
+  if(k==='scen'){stopAnim(true);state.scenario=b.dataset.id;state.showHealthy=false;applyPathology();renderPanel();renderDock();focusScenario();}
+  if(k==='variant'){stopAnim(true);state.variant[state.scenario]=b.dataset.v;state.showHealthy=false;applyPathology();renderPanel();renderDock();focusScenario();}
+  if(k==='healthy'){stopAnim(true);state.showHealthy=b.dataset.h==='1';applyPathology();renderPanel();renderDock();}
+  if(k==='goto')setMode(b.dataset.m);
+});
+function focusScenario(){
+  const id=state.scenario,v=state.variant[id];
+  if(id==='diabetes'||id==='epi'||id==='cancer'||(id==='cyst'&&v==='other'))setView('transparent');
+  else if(id==='chronic')setView('section');
+  else if(state.view!=='external')setView('external');
+}
+
+/* --- schematy panelu --- */
+function chainSVG(cols,cls){const xs=[24,62,100,138];let s=`<svg class="chain ${cls||''}" viewBox="0 0 170 34" aria-hidden="true">`;
+  for(let i=0;i<3;i++)s+=`<line class="bond" x1="${xs[i]}" y1="17" x2="${xs[i+1]}" y2="17" stroke="#8A9AA0" stroke-width="3"/>`;
+  const dx=[-12,-4,4,12];xs.forEach((x,i)=>{s+=`<g class="b" style="--dx:${dx[i]}px"><circle cx="${x}" cy="17" r="10" fill="${cols[i%cols.length]}" stroke="rgba(0,0,0,.18)"/></g>`;});return s+'</svg>';}
+function digestSchem(){return`<div class="schem"><p class="eyebrow" style="margin-bottom:4px">Co robią enzymy w jelicie</p>
+  <div class="erow"><span class="nm">Tłuszcze</span>${chainSVG(['#E6BE36','#EFD06A'])}<span class="res"><span class="enz">lipaza</span> → kwasy tłuszczowe i glicerol</span></div>
+  <div class="erow"><span class="nm">Białka</span>${chainSVG(['#C26A7A','#D98E6B','#9C6FB0','#C99A5B'])}<span class="res"><span class="enz">proteazy, np. trypsyna</span> → drobne części białek (aminokwasy)</span></div>
+  <div class="erow"><span class="nm">Węglowodany</span>${chainSVG(['#8DB255','#A8C878'])}<span class="res"><span class="enz">amylaza</span> → cukry proste</span></div>
+  <p class="small muted" style="margin-top:8px">Żółć z wątroby rozbija tłuszcz na drobne kropelki, co ułatwia pracę lipazy. Sok trzustkowy zobojętnia też kwas z żołądka.</p></div>`;}
+function sugarSchem(){return`<div class="schem" style="display:grid;grid-template-columns:130px 1fr;gap:12px;align-items:center">
+  <svg viewBox="0 0 140 210" aria-label="Poziom glukozy we krwi"><text x="62" y="13" text-anchor="middle" font-size="11.5" font-weight="700" fill="#4A6067">GLUKOZA WE KRWI</text>
+   <rect x="38" y="24" width="44" height="170" rx="10" fill="#F4F8F8" stroke="#CFDCDF" stroke-width="1.5"/>
+   <rect x="38" y="92" width="44" height="40" fill="#DDEFE3"/><text x="88" y="116" font-size="10.5" fill="#2A6447" font-weight="700">norma</text>
+   <text x="88" y="44" font-size="10.5" fill="#A8402B" font-weight="700">za dużo</text><text x="88" y="186" font-size="10.5" fill="#A8402B" font-weight="700">za mało</text>
+   <rect id="gaugeFill" x="42" y="110" width="36" height="80" rx="7" fill="#E05A72"/><rect id="gaugeMark" x="32" y="108" width="56" height="4" rx="2" fill="#14303A"/></svg>
+  <div style="display:grid;gap:8px">
+   <div id="gIns" class="lane b" style="padding:8px 10px"><b style="color:#4B48A8">Insulina</b> <span class="small">— z komórek beta. Obniża poziom: pomaga glukozie wejść do komórek i do wątroby.</span></div>
+   <div id="gGlc" class="lane" style="padding:8px 10px;border-color:#F0C690;background:#FDF5EA"><b style="color:#A3600F">Glukagon</b> <span class="small">— z komórek alfa. Podnosi poziom: wątroba uwalnia zapasy glukozy.</span></div>
+  </div></div>`;}
+function updateGauge(){const f=$('#gaugeFill'),mk=$('#gaugeMark');if(!f)return;const top=26,bot=190;const y=bot-(bot-top)*sugarLevel;f.setAttribute('y',y.toFixed(1));f.setAttribute('height',(bot-y).toFixed(1));mk.setAttribute('y',(y-2).toFixed(1));
+  const a=state.anim;if(!a)return;const ins=$('#gIns'),glc=$('#gGlc');const pA=(a.t%ANIMS.sugar.dur)<ANIMS.sugar.dur/2;ins.style.opacity=pA?1:0.45;glc.style.opacity=pA?0.45:1;}
+function epiSchem(){return`<div class="schem"><p class="eyebrow" style="margin-bottom:8px">Ilość działających enzymów w jelicie (schemat)</p>
+  <div class="bars"><div class="bar"><span>Zdrowa trzustka</span><span class="tr"><i style="width:100%"></i></span></div>
+  <div class="bar"><span>Niewydolność</span><span class="tr"><i style="width:18%;background:#E0533D"></i></span></div></div>
+  <div class="erow" style="margin-top:8px"><span class="nm">Tłuszcz</span>${chainSVG(['#E6BE36','#EFD06A'],'slow')}<span class="res">za mało lipazy → tłuszcz pozostaje nierozłożony</span></div></div>`;}
+function jaundiceSchem(){const eye=(sc,l)=>`<figure><svg viewBox="0 0 120 60" width="120" height="60"><path d="M6 30 Q60 -6 114 30 Q60 66 6 30Z" fill="${sc}" stroke="#7A6A5A" stroke-width="2"/><circle cx="60" cy="30" r="15" fill="#6B8BA4"/><circle cx="60" cy="30" r="7" fill="#1E2A30"/><circle cx="55" cy="25" r="3" fill="#fff"/></svg><figcaption>${l}</figcaption></figure>`;
+  return`<div class="schem"><p class="eyebrow" style="margin-bottom:6px">Żółtaczka — jak może wyglądać</p><div class="eye-row">${eye('#FFFFFF','Prawidłowe białko oka')}${eye('#EFD86A','Zażółcone białko oka')}</div>
+  <p class="small muted" style="margin-top:6px">Żółtaczka ma wiele przyczyn, np. choroby wątroby lub kamienie w przewodach. Nie oznacza automatycznie raka.</p></div>`;}
+function diabetesSchem(v){
+  const cfg={t1:{keys:0,open:0.08,flow:0,blood:14,txt:'Brak kluczy (insuliny) — drzwi pozostają zamknięte.'},t2:{keys:3,open:0.35,flow:2,blood:10,txt:'Klucze są, ale zamek słabo reaguje — drzwi uchylają się tylko trochę.'},t3c:{keys:1,open:0.4,flow:1,blood:11,txt:'Mniej kluczy, bo zniszczonych jest część wysp.'}};
+  const H={keys:4,open:1,flow:5,blood:5,txt:'Insulina (klucz) otwiera drzwi — glukoza przechodzi do komórki.'};
+  const c=state.showHealthy?H:cfg[v];const r=mulberry(5);
+  let s=`<svg viewBox="0 0 360 210" aria-label="Schemat działania insuliny">
+   <rect x="8" y="22" width="122" height="176" rx="18" fill="#F9E1E4" stroke="#C9474B" stroke-width="2"/><text x="69" y="15" text-anchor="middle" font-size="13" font-weight="700" fill="#8E2C3A">KREW</text>
+   <rect x="196" y="22" width="156" height="176" rx="22" fill="#E8F3EF" stroke="#5E9C83" stroke-width="2"/><text x="274" y="15" text-anchor="middle" font-size="13" font-weight="700" fill="#2A6447">KOMÓRKA</text>
+   <rect x="188" y="${(110-26*c.open).toFixed(0)}" width="16" height="${(52*c.open+2).toFixed(0)}" fill="#FFFFFF" stroke="none"/>
+   <rect x="186" y="${(84-26*(1-c.open)*0).toFixed(0)}" width="20" height="${(26*(1-c.open)).toFixed(0)}" fill="#5E9C83"/><rect x="186" y="${(110+26*c.open).toFixed(0)}" width="20" height="${(26*(1-c.open)).toFixed(0)}" fill="#5E9C83"/>
+   <rect x="168" y="96" width="14" height="28" rx="4" fill="#B9B6E8" stroke="#4C4FCB" stroke-width="1.5"/><text x="175" y="146" text-anchor="middle" font-size="10.5" fill="#4C4FCB" font-weight="700">zamek</text>`;
+  for(let i=0;i<c.keys;i++){const y=98+(i-(c.keys-1)/2)*16;s+=`<g transform="translate(${i===0?150:118-i*6},${y})"><circle cx="0" cy="0" r="6" fill="none" stroke="#4C4FCB" stroke-width="3"/><line x1="6" y1="0" x2="${i===0?16:14}" y2="0" stroke="#4C4FCB" stroke-width="3"/><line x1="12" y1="0" x2="12" y2="5" stroke="#4C4FCB" stroke-width="3"/></g>`;}
+  for(let i=0;i<c.blood;i++){const x=24+r()*90,y=36+r()*150;s+=`<circle cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="6" fill="#fff" stroke="#C9474B" stroke-width="1.5"/>`;}
+  for(let i=0;i<c.flow;i++){s+=`<circle r="6" fill="#fff" stroke="#C9474B" stroke-width="1.5"><animateMotion dur="${(3.2+i*0.3).toFixed(1)}s" begin="${(i*0.7).toFixed(1)}s" repeatCount="indefinite" path="M 90 110 C 140 110, 170 110, 196 110 S 260 ${80+i*14}, 300 ${70+i*20}"/></circle>`;}
+  for(let i=0;i<Math.min(c.flow,4);i++){s+=`<circle cx="${250+i*22}" cy="${150+(i%2)*16}" r="6" fill="#fff" stroke="#C9474B" stroke-width="1.5" opacity=".9"/>`;}
+  s+=`<text x="69" y="206" text-anchor="middle" font-size="10.5" fill="#8E2C3A">○ glukoza</text></svg>`;
+  return`<div class="schem"><p class="eyebrow" style="margin-bottom:4px">Schemat funkcjonalny: insulina jak klucz</p>${s}<p class="small" style="margin-top:6px"><b>${state.showHealthy?'Zdrowa trzustka':scen('diabetes').variants.find(x=>x[0]===v)[1]}:</b> ${c.txt}</p></div>`;
+}
+
+/* ======================= POWIĘKSZENIE MIKROSKOPOWE ======================= */
+const MKEYS=[
+  ['acinar','#ECBE93','Komórki zrazikowe','Ułożone w grona (zraziki). Wytwarzają enzymy trawienne — to one tworzą większość trzustki.'],
+  ['gran','#C9822E','Ziarna z enzymami','Magazyny enzymów w komórkach. Po posiłku komórka wypuszcza je do światła zrazika.'],
+  ['duct','#2A86B3','Drobne przewodziki','Odprowadzają sok trawienny. Łączą się w coraz większe przewody, aż do przewodu Wirsunga.'],
+  ['islet','#F6E7CF','Wyspa trzustkowa (Langerhansa)','Skupisko komórek wytwarzających hormony. Wysp jest ok. miliona, a stanowią one tylko ok. 1–2% trzustki.'],
+  ['beta','#7B74D6','Komórki beta → insulina','Najliczniejsze w wyspie. Wydzielają insulinę, która obniża poziom cukru we krwi.'],
+  ['alpha','#E8A34A','Komórki alfa → glukagon','Wydzielają glukagon, który podnosi poziom cukru we krwi.'],
+  ['delta','#6FA59E','Komórki delta → somatostatyna','Nieliczne. Ich hormon hamuje wydzielanie innych hormonów i reguluje pracę wysp.'],
+  ['cap','#C4474B','Naczynia włosowate','Bardzo cienkie naczynia krwionośne. Hormony z wysp trafiają nimi prosto do krwi, a nie do przewodów.']];
+function microSVG(){
+  const r=mulberry(21);let s=`<svg viewBox="0 0 780 450" role="img" aria-label="Schemat mikroskopowy trzustki">`;
+  s+=`<rect width="780" height="450" fill="#FFF8F1"/>`;
+  const acini=[[85,105],[200,85],[315,95],[70,225],[185,205],[300,230],[105,340],[225,330],[340,345],[690,90],[715,215],[690,345],[440,385],[575,395]];
+  const ICX=530,ICY=200,IR=118;
+  let ducts=`<g data-k="duct"><path d="M10 432 C 200 418, 520 440, 770 424" stroke="#2A86B3" stroke-width="12" fill="none" stroke-linecap="round" opacity=".9"/>`;
+  acini.forEach(a=>{ducts+=`<path d="M${a[0]} ${a[1]} Q ${a[0]+(r()-0.5)*30} ${(a[1]+432)/2}, ${a[0]+(r()-0.5)*40} 430" stroke="#5FA9CF" stroke-width="4" fill="none" stroke-linecap="round"/>`;});
+  ducts+='</g>';s+=ducts;
+  let ac='<g data-k="acinar">',gr='<g data-k="gran">',lu='<g data-k="duct">';
+  acini.forEach(a=>{const n=7,Rr=48,rot=r()*6;for(let i=0;i<n;i++){const a0=rot+i*2*Math.PI/n+0.05,a1=rot+(i+1)*2*Math.PI/n-0.05;const P=(rr,an)=>[(a[0]+Math.cos(an)*rr).toFixed(1),(a[1]+Math.sin(an)*rr).toFixed(1)];
+      const p0=P(9,a0),p1=P(Rr,a0),p2=P(Rr,a1),p3=P(9,a1);
+      ac+=`<path d="M${p0} L${p1} A${Rr} ${Rr} 0 0 1 ${p2} L${p3} Z" fill="#ECBE93" stroke="#C9936A" stroke-width="1.3"/>`;
+      const am=(a0+a1)/2;const nu=P(Rr*0.72,am);ac+=`<circle cx="${nu[0]}" cy="${nu[1]}" r="5.5" fill="#5B6FA6"/>`;
+      for(let k=0;k<3;k++){const g=P(Rr*(0.3+k*0.09),am+(k-1)*0.18);gr+=`<circle cx="${g[0]}" cy="${g[1]}" r="2.6" fill="#C9822E"/>`;}}
+    lu+=`<circle cx="${a[0]}" cy="${a[1]}" r="8" fill="#BFE0F0" stroke="#2A86B3" stroke-width="1.5"/>`;});
+  s+=ac+'</g>'+gr+'</g>'+lu+'</g>';
+  s+=`<g data-k="islet"><circle cx="${ICX}" cy="${ICY}" r="${IR}" fill="#F6E7CF" stroke="#C9A97A" stroke-width="2.5" stroke-dasharray="6 5"/></g>`;
+  let be='<g data-k="beta">',al='<g data-k="alpha">',de='<g data-k="delta">';
+  for(let gy=-IR;gy<=IR;gy+=17)for(let gx=-IR;gx<=IR;gx+=17){const x=gx+((Math.round(gy/17))%2?8.5:0)+(r()-0.5)*4,y=gy+(r()-0.5)*4;const d=Math.hypot(x,y);if(d>IR-11)continue;const q=r();
+    const cell=(f,st)=>`<circle cx="${(ICX+x).toFixed(1)}" cy="${(ICY+y).toFixed(1)}" r="7.6" fill="${f}" stroke="${st}" stroke-width="1"/><circle cx="${(ICX+x).toFixed(1)}" cy="${(ICY+y).toFixed(1)}" r="2.6" fill="rgba(20,30,50,.55)"/>`;
+    if(q<0.07)de+=cell('#6FA59E','#3E7A72');else if(d>IR*0.66&&q<0.72)al+=cell('#E8A34A','#B5761F');else be+=cell('#7B74D6','#4C46A8');}
+  s+=be+'</g>'+al+'</g>'+de+'</g>';
+  s+=`<g data-k="cap" fill="none" stroke="#C4474B" stroke-width="5" stroke-linecap="round" opacity=".92"><path d="M400 150 C 460 120, 520 190, 600 140 S 680 110, 720 150"/><path d="M420 260 C 480 230, 560 290, 640 245"/><path d="M520 85 C 505 150, 560 220, 530 320"/></g>`;
+  s+=`<g font-family="Atkinson Hyperlegible Next, sans-serif" font-weight="700" pointer-events="none"><rect x="14" y="8" width="250" height="38" rx="9" fill="#FFFFFF" stroke="#C9936A" stroke-width="1.5"/><text x="28" y="35" font-size="22" fill="#7A4A26">Zraziki → enzymy</text>
+    <rect x="412" y="8" width="244" height="38" rx="9" fill="#FFFFFF" stroke="#C9A97A" stroke-width="1.5"/><text x="426" y="35" font-size="22" fill="#6B4E1A">Wyspa → hormony</text>
+    <text x="760" y="414" text-anchor="end" font-size="18" fill="#1E6C93">przewodzik → do przewodu Wirsunga</text>
+    <line x1="24" y1="404" x2="104" y2="404" stroke="#14303A" stroke-width="3"/><text x="24" y="394" font-size="16" fill="#14303A">ok. 0,05 mm (przybliżona skala)</text></g>`;
+  return s+'</svg>';
+}
+const micro=$('#micro');
+function openMicro(){state.micro=true;micro.hidden=false;
+  micro.innerHTML=`<div class="micro-head"><span class="zoomtag">${ICON_ZOOM.replace('<svg','<svg width="18" height="18"')}Powiększenie ok. 400×</span><h2>Schemat mikroskopowy tkanki trzustki</h2><button class="primary" style="margin-left:auto" id="microClose">Wróć do modelu 3D</button></div>
+  <p class="muted" style="margin:0">To schemat, nie zdjęcie, i nie jest w skali modelu 3D. Ten sam obraz powtarza się w całej trzustce: wyspy są rozsiane między zrazikami, nieco liczniej w ogonie.</p>
+  <div class="micro-body"><div class="micro-fig" id="microFig">${microSVG()}</div><div class="micro-side">${MKEYS.map(k=>`<button class="mkey" data-mk="${k[0]}" aria-pressed="false"><i style="background:${k[1]}"></i><div><b>${k[2]}</b><span>${k[3]}</span></div></button>`).join('')}</div></div>`;
+  $('#microClose').addEventListener('click',closeMicro);
+  const fig=$('#microFig');
+  const focusK=k=>{micro.querySelectorAll('.mkey').forEach(b=>b.setAttribute('aria-pressed',b.dataset.mk===k));fig.querySelectorAll('[data-k]').forEach(g=>g.classList.toggle('dim',!!k&&g.dataset.k!==k&&!(k==='islet'&&['beta','alpha','delta','cap'].includes(g.dataset.k))));};
+  micro.querySelectorAll('.mkey').forEach(b=>b.addEventListener('click',()=>focusK(b.getAttribute('aria-pressed')==='true'?null:b.dataset.mk)));
+  fig.addEventListener('click',e=>{const g=e.target.closest('[data-k]');if(g)focusK(g.dataset.k);});
+}
+function closeMicro(){state.micro=false;micro.hidden=true;micro.innerHTML='';}
+
+/* ======================= NARZĄDY (popover) ======================= */
+const organPop=$('#organPop');
+function renderOrganPop(){const list=[['duodenum','Dwunastnica'],['stomach','Żołądek'],['spleen','Śledziona'],['gallbladder','Pęcherzyk żółciowy'],['veins','Żyły za trzustką']];
+  organPop.innerHTML=list.map(o=>`<label><input type="checkbox" id="org-${o[0]}" data-org="${o[0]}" ${state.organs[o[0]]?'checked':''}><span class="sw" style="background:${hex(STRUCT[o[0]].col)}"></span>${o[1]}</label>`).join('')+
+  `<div style="display:flex;gap:6px;margin-top:6px"><button class="mini" data-all="1">Pokaż wszystkie</button><button class="mini" data-all="0">Ukryj wszystkie</button></div>`;}
+organPop.addEventListener('change',e=>{const k=e.target.dataset.org;if(!k)return;state.organs[k]=e.target.checked;if(!e.target.checked&&state.selected===k)select(null);refreshVisibility();});
+organPop.addEventListener('click',e=>{const b=e.target.closest('[data-all]');if(!b)return;const on=b.dataset.all==='1';Object.keys(state.organs).forEach(k=>state.organs[k]=on);if(!on&&state.selected&&STRUCT[state.selected].organ)select(null);renderOrganPop();refreshVisibility();});
+document.addEventListener('click',e=>{const d=$('#organs');if(d.open&&!d.contains(e.target))d.open=false;});
+
+/* ======================= TRYBY ======================= */
+function setMode(m){
+  stopAnim(true);closeMicro();state.mode=m;state.showHealthy=false;
+  document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.mode===m));
+  if(m==='healthy'){Object.keys(state.organs).forEach(k=>state.organs[k]=k!=='veins');renderOrganPop();setView('external');resetView();}
+  if(m==='disease'&&state.scenario)focusScenario();
+  if(m==='build'&&state.view==='transparent'&&!state.anim)setView('external');
+  applyPathology();renderPanel();renderDock();
+}
+document.querySelectorAll('[data-mode]').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+$('#lblBtn').addEventListener('click',()=>{state.labels=!state.labels;$('#lblBtn').setAttribute('aria-pressed',state.labels);rebuildLabels();});
+$('#resetBtn').addEventListener('click',()=>{resetView();select(null);});
+
+/* ======================= PEŁNY EKRAN ======================= */
+const appEl=$('#app');
+$('#fsBtn').addEventListener('click',()=>{
+  const fsEl=document.fullscreenElement||document.webkitFullscreenElement;
+  try{if(fsEl){(document.exitFullscreen||document.webkitExitFullscreen).call(document);return;}
+    const req=appEl.requestFullscreen||appEl.webkitRequestFullscreen;if(!req)throw new Error('brak');
+    const p=req.call(appEl);if(p&&p.catch)p.catch(fsFail);}catch(err){fsFail();}
+});
+function fsFail(){dockMain.innerHTML='<p class="hint">Pełny ekran nie jest dostępny w tym widoku lub urządzeniu. Na tablecie możesz użyć przycisku „Dodaj do ekranu początkowego” w przeglądarce.</p>';setTimeout(renderDock,4500);}
+['fullscreenchange','webkitfullscreenchange'].forEach(ev=>document.addEventListener(ev,()=>{const on=!!(document.fullscreenElement||document.webkitFullscreenElement);$('#fsTx').textContent=on?'Zamknij pełny ekran':'Pełny ekran';}));
+
+/* ======================= KLIKANIE W MODEL ======================= */
+const ray=new THREE.Raycaster(),ndc=new THREE.Vector2();let down=null;
+renderer.domElement.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY};tween=null;});
+renderer.domElement.addEventListener('pointerup',e=>{if(!down)return;const d=Math.hypot(e.clientX-down.x,e.clientY-down.y);down=null;if(d>6)return;
+  const rc=renderer.domElement.getBoundingClientRect();ndc.set((e.clientX-rc.left)/rc.width*2-1,-(e.clientY-rc.top)/rc.height*2+1);ray.setFromCamera(ndc,camera);
+  const cand=allMeshes.filter(m=>m.visible&&m.userData.sid);const hits=ray.intersectObjects(cand,false);
+  if(!hits.length){select(null);return;}
+  const tr=state.view==='transparent';
+  const isGhost=h=>{const sid=h.object.userData.sid;return sid==='stomach'||sid==='veins'&&!state.anim||(tr&&(PANC_SEGS.includes(sid)||sid==='duodenum'));};
+  const firm=hits.find(h=>!isGhost(h));const h=firm||hits[0];
+  select(h.object.userData.sid,false);
+});
+
+/* ======================= PĘTLA ======================= */
+let W=0,H=0;
+function resize(){const r=stage.getBoundingClientRect();W=Math.max(1,r.width);H=Math.max(1,r.height);renderer.setSize(W,H,false);camera.aspect=W/H;camera.updateProjectionMatrix();leaders.setAttribute('viewBox',`0 0 ${W} ${H}`);LBL.forEach(l=>{l.w=l.el.offsetWidth;l.h=l.el.offsetHeight;});}
+new ResizeObserver(resize).observe(stage);resize();
+camera.position.copy(homePos());controls.target.copy(HOME_T);controls.update();
+let last=performance.now(),pulse=0;
+function loop(now){
+  const dt=Math.min(0.05,(now-last)/1000);last=now;
+  if(tween){tween.s+=dt/tween.d;const f=smooth(Math.min(1,tween.s));camera.position.lerpVectors(tween.p0,tween.p1,f);controls.target.lerpVectors(tween.q0,tween.q1,f);if(tween.s>=1)tween=null;}
+  controls.update();
+  tickAnim(dt);
+  if(state.selected&&!REDUCED){pulse+=dt;const k=0.32+0.14*Math.sin(pulse*3.2);(STRUCT[state.selected].meshes||[]).forEach(m=>{if(m.material.emissive)m.material.emissiveIntensity=k;});}
+  renderer.render(scene,camera);
+  layoutLabels(W,H);updateCompass();
+  requestAnimationFrame(loop);
+}
+
+/* ======================= START ======================= */
+if(W<520){state.labels=false;$('#lblBtn').setAttribute('aria-pressed','false');}
+renderOrganPop();applyPathology();renderPanel();renderDock();
+requestAnimationFrame(loop);
+})();
+</script>
+
+</body>
+</html>
